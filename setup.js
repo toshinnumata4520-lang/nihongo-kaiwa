@@ -3,7 +3,7 @@
 // キーは呼び出し元に返すだけ（保存は index.html 側で、端末のブラウザ内のみ）。
 // ログインの許可は設定が終わったらその場で取り消す。
 
-import { getLang } from "./i18n.js?v=202610091352";
+import { getLang } from "./i18n.js?v=202610091403";
 const L = (ja, en) => getLang() === "ja" ? ja : en;
 
 // Google Cloud の OAuth クライアントID（設定専用プロジェクト simul-interpreter-setup で作成）

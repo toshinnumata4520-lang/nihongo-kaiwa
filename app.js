@@ -1,13 +1,13 @@
-import { t, tja, getLang, setLang } from "./i18n.js?v=202610091352";
-import { SCENES } from "./scenes.js?v=202610091352";
-import { SITUATIONS } from "./situations.js?v=202610091352";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610091352";
-import { startConversation, stopConversation, sendNote, liveSpeak, LIVE_MODEL } from "./live.js?v=202610091352";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js?v=202610091352";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610091352";
-import { EXAMS } from "./exams.js?v=202610091352";
-import * as S from "./store.js?v=202610091352";
-import { autoSetup, preloadGis } from "./setup.js?v=202610091352";
+import { t, tja, getLang, setLang } from "./i18n.js?v=202610091403";
+import { SCENES } from "./scenes.js?v=202610091403";
+import { SITUATIONS } from "./situations.js?v=202610091403";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610091403";
+import { startConversation, stopConversation, sendNote, liveSpeak, LIVE_MODEL } from "./live.js?v=202610091403";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js?v=202610091403";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610091403";
+import { EXAMS } from "./exams.js?v=202610091403";
+import * as S from "./store.js?v=202610091403";
+import { autoSetup, preloadGis } from "./setup.js?v=202610091403";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -23,10 +23,38 @@ const bi = k => L() === "ja" ? esc(t(k)) : `${esc(t(k))}<span class="ja">${esc(t
 const sceneTitle = sc => L() === "ja" ? sc.title_ja : sc.title?.[L()] || sc.title_ja;
 const sceneGoal = sc => L() === "ja" ? sc.goal_ja : sc.goal?.[L()] || sc.goal_ja;
 
+// 画面を切り替えるたびに、前の画面の音・マイク・AIとの接続をすべて止める
+// （「画面を変えても音声が流れ続ける」への対応）。screenGen は、作りかけの声が後から別の画面で鳴るのを防ぐ番号
+let screenGen = 0;
+const playingSources = new Set();
+let currentRec = null;
+let activeTalkFinish = null;
+function stopAllAudio() {
+  for (const s of playingSources) try { s.stop(); } catch {}
+  playingSources.clear();
+  try { window.speechSynthesis?.cancel(); } catch {}
+  try { currentRec?.abort(); } catch {}
+  currentRec = null;
+}
+function playBuffer(ctx, buf, gen) {
+  if (gen !== screenGen) return;   // 声ができる前に画面が変わっていたら鳴らさない
+  const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
+  playingSources.add(src); src.onended = () => playingSources.delete(src);
+  src.start();
+}
 function show(html) {
+  screenGen++;
+  stopAllAudio();
+  if (activeTalkFinish) { const f = activeTalkFinish; activeTalkFinish = null; f(true); }   // 会話中に画面が変わったら会話を閉じる
   $app.innerHTML = html; window.scrollTo(0, 0);
   $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
 }
+// アプリを閉じた・別のアプリに切り替えたときも止める
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "hidden") return;
+  stopAllAudio();
+  if (activeTalkFinish) { const f = activeTalkFinish; activeTalkFinish = null; f(); }
+});
 
 // お手本の声。キーがあればAIの自然な声（一度作った声は使い回す）、なければスマホの読み上げ
 const sayCache = new Map();
@@ -35,6 +63,8 @@ async function say(text) {
   // 短い言葉（用語カードなど）は、AIの声だと発音が崩れたり説明をしゃべったりするので、スマホの読み上げで読む
   if (text.replace(/[。、！？\s]/g, "").length <= 10) { sayLocal(text); return; }
   if (S.getKey() && !ttsBroken) {
+    const gen = screenGen;
+    stopAllAudio();
     try {
       sayCtx ||= new (window.AudioContext || window.webkitAudioContext)();
       await sayCtx.resume();
@@ -49,7 +79,7 @@ async function say(text) {
         }
         sayCache.set(text, buf);
       }
-      const src = sayCtx.createBufferSource(); src.buffer = sayCache.get(text); src.connect(sayCtx.destination); src.start();
+      playBuffer(sayCtx, sayCache.get(text), gen);
       return;
     } catch (e) { console.warn("TTS fallback", e); ttsBroken = true; return; }   // 次に押したときからスマホの読み上げ
   }
@@ -350,6 +380,7 @@ function renderTalk(sc) {
     if ($s && scaf) { $s.innerHTML = supportHtml(scaf, level); wireSupport(scaf); }
   });
 
+  activeTalkFinish = finish;
   startConversation({
     key, systemText: systemFor(sc, level),
     openingText: "（練習を始めます。あなたの最初の一言から話してください）",
@@ -401,10 +432,13 @@ function renderTalk(sc) {
   };
   document.getElementById("end").onclick = () => finish();
 
-  async function finish() {
+  // leaving=true: 画面が変わったので会話を閉じるだけ（結果画面は出さない）
+  async function finish(leaving = false) {
     if (finished) return; finished = true;
+    activeTalkFinish = null;
     clearInterval(timer);
     const seconds = stopConversation();
+    if (leaving) return;
     const clean = transcript.filter(m => m.text.trim()).map(m => ({ who: m.who, text: m.who === "me" ? mask(m.text) : m.text }));
     renderFeedback(sc, clean, seconds, usage);
   }
@@ -471,6 +505,7 @@ function listenOnce() {
   const label = $btn?.innerHTML;
   return new Promise(resolve => {
     const r = new SR(); r.lang = "ja-JP"; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
+    currentRec = r;   // 画面が変わったら止められるように
     let got = "", finished = false;
     const box = document.createElement("div");
     box.className = "livecap";
@@ -573,6 +608,8 @@ async function playVoice(d, slow) {
   const ck = d.id + (slow ? ":slow" : "");
   const local = () => speak(d.say_kana || d.say, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
   if (ttsBroken || !S.getKey()) { local(); return; }
+  const gen = screenGen;
+  stopAllAudio();   // 連打しても重ならないように
   const $st = document.getElementById("voiceStatus");
   try {
     if (!audioCache.has(ck) && $st) $st.textContent = t("voiceLoading");
@@ -590,7 +627,7 @@ async function playVoice(d, slow) {
       }
       audioCache.set(ck, buf);
     }
-    const src = drillCtx.createBufferSource(); src.buffer = audioCache.get(ck); src.connect(drillCtx.destination); src.start();
+    playBuffer(drillCtx, audioCache.get(ck), gen);
     if ($st) $st.textContent = "";
   } catch (e) {
     console.warn("TTS fallback", e);
