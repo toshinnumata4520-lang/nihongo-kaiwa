@@ -48,6 +48,10 @@ export async function startConversation({ key, systemText, openingText, onText, 
     inputAudioTranscription: {},
     outputAudioTranscription: {},
     generationConfig: { responseModalities: ["AUDIO"] },
+    // 話し始めの判定を鈍く、話し終わりまでの待ちを長くする（雑音や考え中の間で切られないように）
+    realtimeInputConfig: { automaticActivityDetection: {
+      startOfSpeechSensitivity: "START_SENSITIVITY_LOW", endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
+      prefixPaddingMs: 300, silenceDurationMs: 1200 } },
   } }));
   ws.onmessage = async e => {
     const msg = JSON.parse(typeof e.data === "string" ? e.data : await e.data.text());
@@ -70,7 +74,7 @@ export async function startConversation({ key, systemText, openingText, onText, 
     if (c.turnComplete) {
       st.onText("ai", "", true);
       st.turnDone = true;
-      if (!st.sources.length) { st.aiSpeaking = false; st.onTurn("you"); }   // 声を流し終わっていれば、すぐ学習者の番
+      if (!st.sources.length) yourTurn(st);   // 声を流し終わっていれば、学習者の番
     }
   };
   ws.onclose = e => {
@@ -106,8 +110,11 @@ function onMic(st, f32) {
   let o = 0; for (const p of st.pending) { all.set(p, o); o += p.length; }
   st.pending = []; st.pendingLen = 0;
   let sum = 0; for (let i = 0; i < all.length; i++) sum += all[i] * all[i];
-  st.onLevel(Math.min(1, Math.sqrt(sum / all.length) * 8));
-  if (!st.ready || st.ws.readyState !== 1) return;
+  // AIが話している間（と話し終わってすぐ）は、マイクの音を送らない。
+  // スピーカーから出たAIの声をマイクが拾って「学習者が話した」と誤判定され、AIが止まるのを防ぐ
+  const muted = st.aiSpeaking || Date.now() < (st.muteUntil || 0);
+  st.onLevel(muted ? 0 : Math.min(1, Math.sqrt(sum / all.length) * 8));
+  if (muted || !st.ready || st.ws.readyState !== 1) return;
   const outLen = Math.floor(all.length * 16000 / rate);
   const pcm = new Int16Array(outLen);
   for (let i = 0; i < outLen; i++) {
@@ -141,11 +148,18 @@ function play(st, b64) {
   node.onended = () => {
     st.sources = st.sources.filter(s => s !== node);
     // AIの発言が終わり、声も流し終わったら、学習者の番
-    if (!st.sources.length && st.turnDone && st.aiSpeaking) { st.aiSpeaking = false; st.onTurn("you"); }
+    if (!st.sources.length && st.turnDone && st.aiSpeaking) yourTurn(st);
   };
 }
 
 function stopPlayback(st) {
   for (const s of st.sources) try { s.stop(); } catch {}
   st.sources = []; st.playAt = 0;
+}
+
+// AIが話し終わったら、部屋に残る声（反響）が消えるのを少し待ってから、学習者の番にしてマイクを開く
+function yourTurn(st) {
+  st.aiSpeaking = false;
+  st.muteUntil = Date.now() + 400;
+  setTimeout(() => { if (!st.stopped && !st.aiSpeaking) st.onTurn("you"); }, 400);
 }
