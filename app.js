@@ -1,13 +1,14 @@
-import { t, tja, getLang, setLang } from "./i18n.js?v=202610091412";
-import { SCENES } from "./scenes.js?v=202610091412";
-import { SITUATIONS } from "./situations.js?v=202610091412";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610091412";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610091412";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js?v=202610091412";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610091412";
-import { EXAMS } from "./exams.js?v=202610091412";
-import * as S from "./store.js?v=202610091412";
-import { autoSetup, preloadGis } from "./setup.js?v=202610091412";
+import { t, tja, getLang, setLang } from "./i18n.js?v=202610091536";
+import { SCENES } from "./scenes.js?v=202610091536";
+import { SITUATIONS } from "./situations.js?v=202610091536";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610091536";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610091536";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js?v=202610091536";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610091536";
+import { EXAMS } from "./exams.js?v=202610091536";
+import { RUBY } from "./ruby.js?v=202610091536";
+import * as S from "./store.js?v=202610091536";
+import { autoSetup, preloadGis } from "./setup.js?v=202610091536";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -18,8 +19,14 @@ const PRICE = { liveAudioIn: 3, liveAudioOut: 12, liveTextIn: 0.75, liveTextOut:
 const $app = document.getElementById("app");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const L = () => getLang();
+// ふりがな：「漢字(よみ)」の形を <ruby> にする。「｜」があれば、そこから後ろだけに付ける（例：｜3日(みっか)）
+const rubyHtml = s => esc(s).replace(/(?:｜([0-9０-９一-龯々〆ヶ]+)|([一-龯々〆ヶ]+))\(([ぁ-んー]+)\)/g, (_, a, b, r) => `<ruby>${a || b}<rt>${r}</rt></ruby>`).replace(/｜/g, "");
+// 日本語の文を表示する。ふりがながONで、ふりがな表（ruby.js）にあれば、ふりがな付きにする
+const jr = s => S.getFurigana() && RUBY[s] ? rubyHtml(RUBY[s]) : esc(s);
+// 画面の言葉：日本語の画面ならふりがな付き
+const tx = k => L() === "ja" ? jr(t(k)) : esc(t(k));
 // 選んだ言語の文と、日本語の文を並べる（日本語を読む練習にもなるように）
-const bi = k => L() === "ja" ? esc(t(k)) : `${esc(t(k))}<span class="ja">${esc(tja(k))}</span>`;
+const bi = k => L() === "ja" ? jr(t(k)) : `${esc(t(k))}<span class="ja">${jr(tja(k))}</span>`;
 const sceneTitle = sc => L() === "ja" ? sc.title_ja : sc.title?.[L()] || sc.title_ja;
 const sceneGoal = sc => L() === "ja" ? sc.goal_ja : sc.goal?.[L()] || sc.goal_ja;
 
@@ -85,6 +92,7 @@ function show(html) {
   playToken++;
   stopAllAudio();
   if (activeTalkFinish) { const f = activeTalkFinish; activeTalkFinish = null; f(true); }   // 会話中に画面が変わったら会話を閉じる
+  document.body.classList.remove("hastabs");
   $app.innerHTML = html; window.scrollTo(0, 0);
   wireSay($app);
 }
@@ -150,7 +158,7 @@ function renderSetup() {
     </section>
     <section class="card">
       <h2>${bi("consentTitle")}</h2>
-      <p>${esc(t("consentBody"))}</p>
+      <p>${tx("consentBody")}</p>
       ${L() !== "ja" ? `<p class="ja">${esc(tja("consentBody"))}</p>` : ""}
       <label class="check"><input type="checkbox" id="age18"> ${bi("age18")}</label>
       <label class="check"><input type="checkbox" id="agree"> ${bi("agreeCheck")}</label>
@@ -182,14 +190,14 @@ function industryLabel(i) {
 // AIの準備（キー）がまだのとき：開発者向けの設定画面に飛ばさず、やさしく説明して、すぐできる練習へ案内する
 function renderNeedSetup() {
   show(`
-    <button class="back link">← ${esc(t("home"))}</button>
+    <button class="back link">← ${tx("home")}</button>
     <section class="card goal">
       <h2>🔒 ${bi("needSetupTitle")}</h2>
       <p>${bi("needSetupBody")}</p>
     </section>
     <button id="goDrill" class="primary">👂 ${bi("drillTitle")}</button>
     <button id="goExam" class="primary">📝 ${bi("examTitle")}</button>
-    <details><summary class="note">${esc(t("forStaff"))}</summary><button id="goSettings" class="sub">⚙ ${esc(t("settings"))}</button></details>`);
+    <details><summary class="note">${tx("forStaff")}</summary><button id="goSettings" class="sub">⚙ ${tx("settings")}</button></details>`);
   $app.querySelector(".back").onclick = renderHome;
   document.getElementById("goDrill").onclick = () => renderDrill(DRILLS.filter(d => d.industry === DRILL_INDUSTRIES[0]), 0);
   document.getElementById("goExam").onclick = () => startExam(EXAM_SETS[0]);
@@ -197,43 +205,98 @@ function renderNeedSetup() {
 }
 
 // ───── ホーム ─────
-function renderHome() {
+// ───── ホーム：下のタブで4つに分ける（1ページに全部ならべると長く、場面練習が下に隠れていたため） ─────
+// きょう＝つぎにやること・復習 / 会話＝場面練習 / 聞く＝聞いてくりかえす / 試験＝試験たいさく
+const TABS = [
+  { id: "today", icon: "🏠", k: "tabToday" },
+  { id: "talk", icon: "🗣", k: "tabTalk" },
+  { id: "listen", icon: "👂", k: "tabListen" },
+  { id: "exam", icon: "📝", k: "tabExam" },
+];
+let currentTab = (() => { try { return localStorage.getItem("nk.tab") || "today"; } catch { return "today"; } })();
+const sceneArea = sc => sc.title_ja.split("：")[0];   // 「飲食：注文を受けて…」→「飲食」
+const sceneShort = sc => sc.title_ja.split("：").slice(1).join("：") || sc.title_ja;
+// 場面の名前は「業種：内容」。ふりがな表に全体があれば、業種と内容のふりがなもそこから作る
+for (const sc of SCENES) {
+  const r = RUBY[sc.title_ja]; if (!r || !r.includes("：")) continue;
+  const [ar, ...rest] = r.split("："), [arJa, ...restJa] = sc.title_ja.split("：");
+  RUBY[arJa] ||= ar; RUBY[restJa.join("：")] ||= rest.join("：");
+}
+const STATUS_LABEL = { new: "st_new", trying: "st_trying", done: "st_done", fluent: "st_fluent" };
+
+// short=true：業種の見出しの下では「飲食：」などを省く
+function sceneButton(sc, short = false) {
+  const st = S.sceneStatus(sc.id);
+  const ja = short ? sceneShort(sc) : sc.title_ja;
+  return `<button class="scene" data-id="${sc.id}">
+    <span class="badge ${st}">${tx(STATUS_LABEL[st])}</span>
+    <span class="title">${L() === "ja" ? jr(ja) : esc(sceneTitle(sc))}</span>
+    ${L() !== "ja" ? `<span class="ja">${jr(ja)}</span>` : ""}
+    <span class="level">${esc(sc.level)}</span>
+  </button>`;
+}
+// つぎのおすすめ：まだ「できた」になっていない場面のうち、練習中のもの → まだのもの の順
+function nextScene() {
+  const order = { trying: 0, new: 1, done: 2, fluent: 3 };
+  return SCENES.slice().sort((x, y) => order[S.sceneStatus(x.id)] - order[S.sceneStatus(y.id)])[0];
+}
+
+function renderHome(tab) {
+  if (typeof tab !== "string") tab = currentTab;   // 「← ホームへ」から呼ばれたときは、前にいたタブへ戻る
+  currentTab = tab;
+  try { localStorage.setItem("nk.tab", tab); } catch {}
   const due = S.dueCards().length;
-  const label = { new: "st_new", trying: "st_trying", done: "st_done", fluent: "st_fluent" };
-  show(`
-    <header class="top"><h1>${bi("appName")}</h1><button id="settings" class="sub settingsbtn" aria-label="settings">⚙ ${esc(t("settingsShort"))}</button></header>
+  let body = "";
+  if (tab === "today") {
+    const sc = nextScene();
+    body = `
     <section class="stats">
       <div><b>${S.practiceDays()}</b><small>${bi("daysPracticed")}</small></div>
       <button id="review" class="statbtn ${due ? "due" : ""}"><b>${due}</b><small>${bi("reviewToday")}</small></button>
     </section>
-    <section class="card drillentry">
+    <h2>${bi("nextUp")}</h2>
+    ${sceneButton(sc)}
+    <div class="quick">
+      <button class="quickbtn" data-go="listen">👂 ${bi("drillTitle")}</button>
+      <button class="quickbtn" data-go="exam">📝 ${bi("examTitle")}</button>
+    </div>
+    <p class="note">${bi("aiNote")}</p>`;
+  } else if (tab === "talk") {
+    const areas = [...new Set(SCENES.map(sceneArea))];
+    body = `<h2>🗣 ${bi("scenes")}</h2>
+    ${areas.map(ar => `<h3 class="area">${jr(ar)}</h3>${SCENES.filter(sc => sceneArea(sc) === ar).map(sc => sceneButton(sc, true)).join("")}`).join("")}`;
+  } else if (tab === "listen") {
+    body = `<section class="card drillentry">
       <h2>👂 ${bi("drillTitle")}</h2>
-      <p class="note">${esc(t("drillNote"))}</p>
+      <p class="note">${tx("drillNote")}</p>
       <div class="row">${DRILL_INDUSTRIES.map(i => `<button class="choice ind" data-ind="${esc(i)}">${industryLabel(i)}</button>`).join("")}</div>
-    </section>
-    <section class="card">
+    </section>`;
+  } else {
+    body = `<section class="card">
       <h2>📝 ${bi("examTitle")}</h2>
       <div class="row">${EXAM_SETS.map((s, i) => s.group ? "" : `<button class="choice" data-exam="${i}">${esc(s.name)}</button>`).join("")}</div>
-      <p class="note">${esc(t("examGroup2"))}</p>
-      <div class="row">${EXAM_SETS.map((s, i) => s.group ? `<button class="choice" data-exam="${i}">${esc(s.name)}</button>` : "").join("")}</div>
-      <p class="note">${esc(t("examNote"))}</p>
-    </section>
-    <h2>${bi("scenes")}</h2>
-    ${SCENES.map(sc => {
-      const st = S.sceneStatus(sc.id);
-      return `<button class="scene" data-id="${sc.id}">
-        <span class="badge ${st}">${esc(t(label[st]))}</span>
-        <span class="title">${esc(sceneTitle(sc))}</span>
-        ${L() !== "ja" ? `<span class="ja">${esc(sc.title_ja)}</span>` : ""}
-        <span class="level">${esc(sc.level)}</span>
-      </button>`;
-    }).join("")}
-    <p class="note">${bi("aiNote")}</p>`);
+      <p class="note">${tx("examGroup2")}</p>
+      <div class="row">${EXAM_SETS.map((s, i) => s.group ? `<button class="choice" data-exam="${i}">${jr(s.name)}</button>` : "").join("")}</div>
+      <p class="note">${tx("examNote")}</p>
+    </section>`;
+  }
+  show(`
+    <header class="top"><h1>${bi("appName")}</h1>
+      <div class="row tight">
+        <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${tx("furigana")}</label>
+        <button id="settings" class="sub settingsbtn" aria-label="${esc(t("settingsShort"))}">⚙ ${tx("settingsShort")}</button>
+      </div></header>
+    ${body}
+    <nav class="tabbar">${TABS.map(x => `<button class="tab ${x.id === tab ? "on" : ""}" data-tab="${x.id}"><span class="ticon">${x.icon}</span><span>${esc(t(x.k))}</span></button>`).join("")}</nav>`);
+  document.body.classList.add("hastabs");
+  $app.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => renderHome(b.dataset.tab));
+  $app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => renderHome(b.dataset.go));
   $app.querySelectorAll(".scene").forEach(b => b.onclick = () => renderPrep(SCENES.find(s => s.id === b.dataset.id)));
   $app.querySelectorAll("[data-ind]").forEach(b => b.onclick = () => renderDrill(DRILLS.filter(d => d.industry === b.dataset.ind), 0));
   $app.querySelectorAll("[data-exam]").forEach(b => b.onclick = () => startExam(EXAM_SETS[+b.dataset.exam]));
-  document.getElementById("review").onclick = renderReview;
+  document.getElementById("review")?.addEventListener("click", renderReview);
   document.getElementById("settings").onclick = renderSettings;
+  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderHome(tab); };
 }
 
 // ───── 準備 ─────
@@ -250,7 +313,7 @@ const loc = o => L() === "ja" ? o.ja : o[L()] || o.en;
 function situationHtml(sc, compact = false, hideTodo = false) {
   const s = SITUATIONS[sc.id];
   if (!s) return "";
-  const both = o => `${esc(loc(o))}${L() !== "ja" ? `<span class="ja">${esc(o.ja)}</span>` : ""}`;
+  const both = o => L() === "ja" ? jr(o.ja) : `${esc(loc(o))}<span class="ja">${jr(o.ja)}</span>`;
   return `<section class="card situation">
     ${compact ? "" : `<h2>${bi("situation")}</h2><p>${both(s.you)}</p>`}
     <p class="${compact ? "" : "big"}">${both(s.now)}</p>
@@ -292,7 +355,7 @@ function supportHtml(scaf, level) {
     }
     const body = level === 3 ? `<span class="jp">${esc(st.skeleton)}</span>`
       : `<span class="kw">${st.keywords.map(k => `<span class="chip">${esc(k)}</span>`).join("")}</span>`;
-    return `<li>${body}<details><summary class="note">${esc(t("showAnswer"))}</summary>
+    return `<li>${body}<details><summary class="note">${tx("showAnswer")}</summary>
       <span class="jp">${sayBtn(st.full, st.furigana)}${esc(st.full)}</span>${S.getFurigana() ? `<span class="furi">${esc(st.furigana)}</span>` : ""}<span class="tr">${esc(st.meaning)}</span></details></li>`;
   }).join("")}</ol></section>`;
 }
@@ -312,22 +375,22 @@ function renderPrep(sc) {
   loadScaffold(sc);   // 会話を始める前に、手助けの材料を先に作っておく
   const lv = getLevel(sc), rec = recommendLevel(sc);
   show(`
-    <button class="back link">← ${esc(t("home"))}</button>
-    <h1>${esc(sceneTitle(sc))}</h1>
+    <button class="back link">← ${tx("home")}</button>
+    <h1>${L() === "ja" ? jr(sc.title_ja) : esc(sceneTitle(sc))}</h1>
     <section class="card goal">
       <h2>${bi("todayGoal")}</h2>
-      <p class="big">${esc(sceneGoal(sc))}</p>
-      ${L() !== "ja" ? `<p class="ja">${esc(sc.goal_ja)}</p>` : ""}
+      <p class="big">${L() === "ja" ? jr(sc.goal_ja) : esc(sceneGoal(sc))}</p>
+      ${L() !== "ja" ? `<p class="ja">${jr(sc.goal_ja)}</p>` : ""}
     </section>
     ${situationHtml(sc)}
     <section class="card">
       <div class="row between"><h2>${bi("phrases")}</h2>
-        <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${esc(t("furigana"))}</label></div>
+        <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${tx("furigana")}</label></div>
       <ul class="phrases">${sc.key_phrases.map(phraseHtml).join("")}</ul>
     </section>
     <section class="card">
       <h2>${bi("levelTitle")}</h2>
-      <div class="levels">${LEVELS.map(x => `<button class="choice lv ${x.n === lv ? "on" : ""}" data-lv="${x.n}">${esc(t(x.k))}${x.n === rec ? `<small>★${esc(t("recommended"))}</small>` : ""}</button>`).join("")}</div>
+      <div class="levels">${LEVELS.map(x => `<button class="choice lv ${x.n === lv ? "on" : ""}" data-lv="${x.n}">${esc(t(x.k))}${x.n === rec ? `<small>★${tx("recommended")}</small>` : ""}</button>`).join("")}</div>
       <p class="note">${esc(t(LEVELS.find(x => x.n === lv).k + "Note"))}</p>
     </section>
     <div class="stickybar"><button id="start" class="primary big">${S.getKey() ? "" : "🔒 "}${bi("start")}</button></div>`);
@@ -398,19 +461,19 @@ function renderTalk(sc) {
   const level = getLevel(sc);
   show(`
     <div class="talk">
-      <div class="row between"><h1>${esc(sceneTitle(sc))}</h1><span id="clock" class="clock">5:00</span></div>
-      <div id="turn" class="turn wait"><span class="icon">⏳</span>${esc(t("connecting"))}</div>
-      <p id="status" class="status note">${esc(t("connecting"))}</p>
+      <div class="row between"><h1>${L() === "ja" ? jr(sc.title_ja) : esc(sceneTitle(sc))}</h1><span id="clock" class="clock">5:00</span></div>
+      <div id="turn" class="turn wait"><span class="icon">⏳</span>${tx("connecting")}</div>
+      <p id="status" class="status note">${tx("connecting")}</p>
       <div class="meter"><div id="level"></div></div>
       <div id="log" class="log"></div>
       <div id="support"></div>
-      <details class="sitbox" open><summary>${esc(t("situation"))}${level < 5 ? "・" + esc(t("todo")) : ""}</summary>${situationHtml(sc, true, level >= 5)}</details>
+      <details class="sitbox" open><summary>${tx("situation")}${level < 5 ? "・" + tx("todo") : ""}</summary>${situationHtml(sc, true, level >= 5)}</details>
       <p id="hintText" class="hinttext" hidden></p>
       <div class="row">
-        <button id="hint" class="sub">💡 ${esc(t("hint"))}</button>
-        <button id="slow" class="sub">🐢 ${esc(t("slower"))}</button>
+        <button id="hint" class="sub">💡 ${tx("hint")}</button>
+        <button id="slow" class="sub">🐢 ${tx("slower")}</button>
       </div>
-      <form id="typeForm" class="row"><input id="typeBox" placeholder="${esc(t("typeHere"))}"><button class="sub">${esc(t("send"))}</button></form>
+      <form id="typeForm" class="row"><input id="typeBox" placeholder="${esc(t("typeHere"))}"><button class="sub">${tx("send")}</button></form>
       <div id="endrow"><button id="end" class="primary">${bi("end")}</button></div>
     </div>`);
   const $log = document.getElementById("log"), $status = document.getElementById("status");
@@ -432,7 +495,7 @@ function renderTalk(sc) {
     // 学習者には英語の生エラーを見せない。キーの誤りだけは分かるように言いかえる
     setStatus(/API key/i.test(detail || "") ? t("keyInvalid") : t(msgKey), true);
     const $t = document.getElementById("turn"); if ($t) { $t.className = "turn wait"; $t.innerHTML = `<span class="icon">⚠️</span>${esc(t(msgKey))}`; }
-    document.getElementById("endrow").innerHTML = `<div class="row"><button id="again" class="primary">🔁 ${esc(t("reconnect"))}</button><button id="home" class="sub">${esc(t("home"))}</button></div>`;
+    document.getElementById("endrow").innerHTML = `<div class="row"><button id="again" class="primary">🔁 ${tx("reconnect")}</button><button id="home" class="sub">${tx("home")}</button></div>`;
     document.getElementById("again").onclick = () => renderTalk(sc);
     document.getElementById("home").onclick = renderHome;
   };
@@ -440,7 +503,7 @@ function renderTalk(sc) {
   loadScaffold(sc).then(scaf => {
     if (!$support.isConnected) return;   // 材料ができる前に、別の画面に移っていたら何もしない
     if (scaf) { $support.innerHTML = supportHtml(scaf, level); wireSupport(scaf); }
-    else if (level < 5) $support.innerHTML = `<p class="note">${esc(t("scafFailed"))}</p>`;
+    else if (level < 5) $support.innerHTML = `<p class="note">${tx("scafFailed")}</p>`;
   });
 
   activeTalkFinish = finish;
@@ -492,7 +555,7 @@ function renderTalk(sc) {
 
   document.getElementById("hint").onclick = () => {
     const h = document.getElementById("hintText");
-    h.hidden = false; h.textContent = sc.hints[hintIdx % sc.hints.length]; hintIdx++;
+    h.hidden = false; h.innerHTML = jr(sc.hints[hintIdx % sc.hints.length]); hintIdx++;
   };
   document.getElementById("slow").onclick = () => sendNote("（学習者が「ゆっくり」を押しました。これからは、もっとゆっくり、短い文で話してください）");
   document.getElementById("typeForm").onsubmit = e => {
@@ -520,7 +583,7 @@ function renderTalk(sc) {
 
 // ───── 直し ─────
 async function renderFeedback(sc, transcript, seconds, liveUsage, isRetry = false) {
-  show(`<p class="status">${esc(t("checking"))}</p>`);
+  show(`<p class="status">${tx("checking")}</p>`);
   let fb = null, textUsage = {}, failed = false;
   const spoke = transcript.some(m => m.who === "me");
   try {
@@ -535,8 +598,8 @@ async function renderFeedback(sc, transcript, seconds, liveUsage, isRetry = fals
 
   if (!fb) {
     show(`<p>${esc(t(failed ? "error" : "noSpeech"))}</p>
-      ${failed ? `<button class="primary" id="again">🔁 ${esc(t("checkAgain"))}</button>` : `<button class="primary" id="again">🔁 ${esc(t("tryAgain"))}</button>`}
-      <button class="link" id="home">${esc(t("home"))}</button>`);
+      ${failed ? `<button class="primary" id="again">🔁 ${tx("checkAgain")}</button>` : `<button class="primary" id="again">🔁 ${tx("tryAgain")}</button>`}
+      <button class="link" id="home">${tx("home")}</button>`);
     document.getElementById("home").onclick = renderHome;
     document.getElementById("again").onclick = () => failed ? renderFeedback(sc, transcript, seconds, liveUsage, true) : renderTalk(sc);
     return;
@@ -548,13 +611,13 @@ async function renderFeedback(sc, transcript, seconds, liveUsage, isRetry = fals
   show(`
     <h1>${bi("result")}</h1>
     <section class="card result ${fb.goal_achieved ? "ok" : ""}">
-      <p class="big">${fb.goal_achieved ? "🎉 " + esc(t("goalDone")) : "🙂 " + esc(t("goalAlmost"))}</p>
+      <p class="big">${fb.goal_achieved ? "🎉 " + tx("goalDone") : "🙂 " + tx("goalAlmost")}</p>
       <p>${esc(fb.praise)}</p>
     </section>
     <section class="card">
       <h2>${bi("oneFix")}</h2>
-      ${f.said ? `<p class="said">${esc(t("youSaid"))}：${esc(f.said)}</p>` : ""}
-      <p class="better">${sayBtn(f.better, f.better_furigana)}${esc(t("better"))}：<b>${esc(f.better)}</b></p>
+      ${f.said ? `<p class="said">${tx("youSaid")}：${esc(f.said)}</p>` : ""}
+      <p class="better">${sayBtn(f.better, f.better_furigana)}${tx("better")}：<b>${esc(f.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(f.better_furigana)}</p>` : ""}
       <p class="why">${esc(why)}</p>
       ${L() !== "ja" ? `<p class="ja">${esc(f.why_ja)}</p>` : ""}
@@ -562,13 +625,13 @@ async function renderFeedback(sc, transcript, seconds, liveUsage, isRetry = fals
     ${(fb.model_lines || []).length ? `<section class="card">
       <h2>${bi("correctJa")}</h2>
       <ol class="model">${fb.model_lines.map(m => `<li>
-        ${m.said ? `<span class="said">${esc(t("youSaid"))}：${esc(m.said)}</span>` : `<span class="said">${esc(t("missing"))}</span>`}
+        ${m.said ? `<span class="said">${tx("youSaid")}：${esc(m.said)}</span>` : `<span class="said">${tx("missing")}</span>`}
         <span class="jp">${sayBtn(m.correct, m.furigana)}${esc(m.correct)}</span>
         ${S.getFurigana() ? `<span class="furi">${esc(m.furigana)}</span>` : ""}
       </li>`).join("")}</ol>
     </section>` : ""}
     <button id="retry" class="primary big">🎙 ${bi("retry")}</button>
-    <button id="home" class="link">${esc(t("home"))}</button>`);
+    <button id="home" class="link">${tx("home")}</button>`);
   document.getElementById("home").onclick = renderHome;
   document.getElementById("retry").onclick = () => renderRetry(sc, f);
 }
@@ -588,7 +651,7 @@ function listenOnce($btn) {
     let got = "", err = null, finished = false;
     const box = document.createElement("div");
     box.className = "livecap";
-    box.innerHTML = `<span class="placeholder">${esc(t("speakNow"))}</span>`;
+    box.innerHTML = `<span class="placeholder">${tx("speakNow")}</span>`;
     $btn?.after(box);
     if ($btn) {
       $btn.classList.add("recording");
@@ -624,18 +687,18 @@ function wireMic(onSaid, $res) {
     if (!$btn.isConnected) return;   // 聞き取りの間に画面が変わっていたら何もしない
     wireMic(onSaid, $res);
     const focusType = () => document.getElementById("typeBox")?.focus();
-    if (r === null) { $res.innerHTML = `<p class="status">${esc(t("noSR"))}</p>`; focusType(); return; }
+    if (r === null) { $res.innerHTML = `<p class="status">${tx("noSR")}</p>`; focusType(); return; }
     if (r.err === "not-allowed" || r.err === "service-not-allowed" || r.err === "audio-capture") {
-      $res.innerHTML = `<p class="status err">${esc(t("micDenied"))}</p>`; focusType(); return;
+      $res.innerHTML = `<p class="status err">${tx("micDenied")}</p>`; focusType(); return;
     }
-    if (r.err === "network" && !r.text) { $res.innerHTML = `<p class="status err">${esc(t("srNetwork"))}</p>`; focusType(); return; }
+    if (r.err === "network" && !r.text) { $res.innerHTML = `<p class="status err">${tx("srNetwork")}</p>`; focusType(); return; }
     onSaid(r.text);
   };
 }
 
 function renderRetry(sc, fix, fromReview = null) {
   show(`
-    <button class="back link">← ${esc(t("home"))}</button>
+    <button class="back link">← ${tx("home")}</button>
     <h1>${bi("retry")}</h1>
     <p>${bi(fromReview ? "reviewPrompt" : "retryPrompt")}</p>
     <section class="card" id="target"${fromReview ? " hidden" : ""}>
@@ -643,8 +706,8 @@ function renderRetry(sc, fix, fromReview = null) {
       ${S.getFurigana() ? `<p class="furi">${esc(fix.better_furigana)}</p>` : ""}
       ${fix.better_meaning ? `<p class="tr">${esc(fix.better_meaning)}</p>` : ""}
     </section>
-    <button id="mic" class="primary big">🎙 ${esc(t("speak"))}</button>
-    <form id="typeForm" class="row"><input id="typeBox" placeholder="${esc(t("typeHere"))}"><button class="sub">${esc(t("send"))}</button></form>
+    <button id="mic" class="primary big">🎙 ${tx("speak")}</button>
+    <form id="typeForm" class="row"><input id="typeBox" placeholder="${esc(t("typeHere"))}"><button class="sub">${tx("send")}</button></form>
     <p id="res" class="status"></p>`);
   $app.querySelector(".back").onclick = renderHome;
   const $res = document.getElementById("res");
@@ -658,7 +721,7 @@ function renderRetry(sc, fix, fromReview = null) {
     $target.hidden = false;   // 答えたら、正しい文を見せる
     if (!S.getKey()) {   // AIの判定が使えないときは、正しい文と比べて自分で〇つけ
       closed = true;
-      $res.innerHTML = `${esc(t("youSaid"))}：${esc(said)}<br>${esc(t("selfCheck"))}<div class="row"><button id="selfok" class="sub">✅ ${esc(t("gotIt"))}</button><button id="selfng" class="sub">🔁 ${esc(t("notYet"))}</button></div>`;
+      $res.innerHTML = `${tx("youSaid")}：${esc(said)}<br>${tx("selfCheck")}<div class="row"><button id="selfok" class="sub">✅ ${tx("gotIt")}</button><button id="selfng" class="sub">🔁 ${tx("notYet")}</button></div>`;
       const done = ok => { if (fromReview) { S.gradeCard(fromReview, ok); renderReview(); } else renderHome(); };
       document.getElementById("selfok").onclick = () => done(true);
       document.getElementById("selfng").onclick = () => done(false);
@@ -669,7 +732,7 @@ function renderRetry(sc, fix, fromReview = null) {
     try {
       const { result } = await judgeRetry(S.getKey(), fix.better, said);
       if (!$res.isConnected) return;
-      $res.innerHTML = `${esc(said)}<br><b>${result.ok ? "✅ " + esc(t("great")) : "🔁 " + esc(t("again"))}</b> ${esc(result.comment)}`;
+      $res.innerHTML = `${esc(said)}<br><b>${result.ok ? "✅ " + tx("great") : "🔁 " + tx("again")}</b> ${esc(result.comment)}`;
       tries++;
       if (result.ok || tries >= 2) {   // ここで終わり：もう一度押せないようにする
         closed = true;
@@ -678,7 +741,7 @@ function renderRetry(sc, fix, fromReview = null) {
       }
       if (fromReview && (result.ok || tries >= 2)) { S.gradeCard(fromReview, result.ok); setTimeout(() => { if ($res.isConnected) renderReview(); }, 1500); return; }
       if (result.ok || tries >= 2) {   // 2回うまくいかなければ、くり返させずに先へ進める
-        $res.insertAdjacentHTML("beforeend", `<br><button class="primary" id="done">${esc(t("home"))}</button>`);
+        $res.insertAdjacentHTML("beforeend", `<br><button class="primary" id="done">${tx("home")}</button>`);
         document.getElementById("done").onclick = renderHome;
       }
     } catch (e) { console.error(e); $res.textContent = t("error"); }
@@ -729,8 +792,8 @@ const kanaLine = k => S.getFurigana() && k ? `<p class="furi">${esc(k)}</p>` : "
 function renderDrill(list, i) {
   // 最後の問題のあとは、だまってホームに戻らず、おわりの画面を出す
   if (i >= list.length) {
-    show(`<h1>👂 ${bi("drillTitle")}</h1><section class="card result ok"><p class="big">🎉 ${esc(t("drillDone"))}</p></section>
-      <button id="again" class="primary">🔁 ${esc(t("examAgain"))}</button><button id="home" class="link">${esc(t("home"))}</button>`);
+    show(`<h1>👂 ${bi("drillTitle")}</h1><section class="card result ok"><p class="big">🎉 ${tx("drillDone")}</p></section>
+      <button id="again" class="primary">🔁 ${tx("examAgain")}</button><button id="home" class="link">${tx("home")}</button>`);
     document.getElementById("again").onclick = () => renderDrill(list, 0);
     document.getElementById("home").onclick = renderHome;
     return;
@@ -738,21 +801,21 @@ function renderDrill(list, i) {
   const d = list[i];
   const log = { replays: 0, slow: 0, revealed: false };
   show(`
-    <button class="back link">← ${esc(t("home"))}</button>
+    <button class="back link">← ${tx("home")}</button>
     <h1>👂 ${bi("drillTitle")}（${i + 1}/${list.length}）</h1>
     <section class="card situation">
-      <p class="big">🗣 ${esc(d.speaker)}<span class="tag">${esc(d.style)}</span></p>
+      <p class="big">🗣 ${jr(d.speaker)}<span class="tag">${esc(d.style)}</span></p>
       <p>${bi("drillTask")}</p>
       <div class="row">
-        <button id="play" class="primary">▶ ${esc(t("listen"))}</button>
-        <button id="slow" class="sub">🐢 ${esc(t("listenSlow"))}</button>
+        <button id="play" class="primary">▶ ${tx("listen")}</button>
+        <button id="slow" class="sub">🐢 ${tx("listenSlow")}</button>
       </div>
       <p id="voiceStatus" class="note"></p>
-      <details id="reveal"><summary class="note">${esc(t("showText"))}</summary><p class="big">${esc(d.say)}</p>${S.getFurigana() && d.say_kana ? `<p class="furi">${esc(d.say_kana)}</p>` : ""}</details>
-      <p class="note">💡 ${esc(t("askTip"))}</p>
+      <details id="reveal"><summary class="note">${tx("showText")}</summary><p class="big">${esc(d.say)}</p>${S.getFurigana() && d.say_kana ? `<p class="furi">${esc(d.say_kana)}</p>` : ""}</details>
+      <p class="note">💡 ${tx("askTip")}</p>
     </section>
-    <button id="mic" class="primary big">🎙 ${esc(t("speak"))}</button>
-    <form id="typeForm" class="row"><input id="typeBox" placeholder="${esc(t("typeHere"))}"><button class="sub">${esc(t("send"))}</button></form>
+    <button id="mic" class="primary big">🎙 ${tx("speak")}</button>
+    <form id="typeForm" class="row"><input id="typeBox" placeholder="${esc(t("typeHere"))}"><button class="sub">${tx("send")}</button></form>
     <div id="res"></div>`);
   $app.querySelector(".back").onclick = renderHome;
   document.getElementById("play").onclick = () => { log.replays++; playVoice(d, false); };
@@ -762,11 +825,11 @@ function renderDrill(list, i) {
   const $res = document.getElementById("res");
   let busy = false;
   const selfCheck = (said, failed) => {
-      $res.innerHTML = (failed ? `<p class="status err">${esc(t("judgeFailed"))}</p>` : "") + `<section class="card"><p class="said">${esc(t("youSaid"))}：${esc(said)}</p>
-        <p class="note">${esc(t("selfCheck"))}</p>
-        <p class="better">${sayBtn(d.model, d.model_kana)}${esc(t("modelAnswer"))}：<b>${esc(d.model)}</b></p>${kanaLine(d.model_kana)}
-        <p class="note">${esc(t("instruction"))}：${esc(d.say)}</p>${kanaLine(d.say_kana)}</section>
-        <div class="row"><button id="again" class="sub">🔁 ${esc(t("tryAgain"))}</button><button id="next" class="primary">${esc(t("next"))} →</button></div>`;
+      $res.innerHTML = (failed ? `<p class="status err">${tx("judgeFailed")}</p>` : "") + `<section class="card"><p class="said">${tx("youSaid")}：${esc(said)}</p>
+        <p class="note">${tx("selfCheck")}</p>
+        <p class="better">${sayBtn(d.model, d.model_kana)}${tx("modelAnswer")}：<b>${esc(d.model)}</b></p>${kanaLine(d.model_kana)}
+        <p class="note">${tx("instruction")}：${esc(d.say)}</p>${kanaLine(d.say_kana)}</section>
+        <div class="row"><button id="again" class="sub">🔁 ${tx("tryAgain")}</button><button id="next" class="primary">${tx("next")} →</button></div>`;
       $res.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
       document.getElementById("again").onclick = () => renderDrill(list, i);
       document.getElementById("next").onclick = () => renderDrill(list, i + 1);
@@ -774,10 +837,10 @@ function renderDrill(list, i) {
   };
   const judge = async said => {
     if (busy) return;
-    if (!said) { $res.innerHTML = `<p class="status">${esc(t("notHeard"))}</p>`; return; }
+    if (!said) { $res.innerHTML = `<p class="status">${tx("notHeard")}</p>`; return; }
     said = mask(said);
     if (!S.getKey()) { selfCheck(said); return; }   // AIの判定が使えないときは、お手本を見て自分で答え合わせして先へ進める
-    $res.innerHTML = `<p class="status">${esc(t("checking"))}</p>`;
+    $res.innerHTML = `<p class="status">${tx("checking")}</p>`;
     busy = true;
     try {
       const { result: r, usage } = await judgeDrill(S.getKey(), d, said, L());
@@ -789,15 +852,15 @@ function renderDrill(list, i) {
       S.addSession({ type: "drill", drill: d.id, at: new Date().toISOString(), seconds: 0, said, ok: r.ok, checks: r.checks, ...log, usage: { text: usage } });
       $res.innerHTML = `
         <section class="card result ${r.ok ? "ok" : ""}">
-          <p class="said">${esc(t("youSaid"))}：${esc(said)}</p>
-          <p class="big">${r.ok ? "✅ " + esc(t("great")) : "🔁 " + esc(t("again"))}</p>
+          <p class="said">${tx("youSaid")}：${esc(said)}</p>
+          <p class="big">${r.ok ? "✅ " + tx("great") : "🔁 " + tx("again")}</p>
           <ul class="checks">${r.checks.map(c => `<li>${c.ok ? "✅" : "⬜"} ${esc(c.item)}</li>`).join("")}</ul>
           <p>${esc(L() === "ja" ? r.comment_ja : r.comment)}</p>
           ${L() !== "ja" ? `<p class="ja">${esc(r.comment_ja)}</p>` : ""}
-          <p class="better">${sayBtn(d.model, d.model_kana)}${esc(t("modelAnswer"))}：<b>${esc(d.model)}</b></p>${kanaLine(d.model_kana)}
-          <p class="note">${esc(t("instruction"))}：${esc(d.say)}</p>${kanaLine(d.say_kana)}
+          <p class="better">${sayBtn(d.model, d.model_kana)}${tx("modelAnswer")}：<b>${esc(d.model)}</b></p>${kanaLine(d.model_kana)}
+          <p class="note">${tx("instruction")}：${esc(d.say)}</p>${kanaLine(d.say_kana)}
         </section>
-        <div class="row"><button id="again" class="sub">🔁 ${esc(t("tryAgain"))}</button><button id="next" class="primary">${esc(t("next"))} →</button></div>`;
+        <div class="row"><button id="again" class="sub">🔁 ${tx("tryAgain")}</button><button id="next" class="primary">${tx("next")} →</button></div>`;
       $res.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
       document.getElementById("again").onclick = () => renderDrill(list, i);
       document.getElementById("next").onclick = () => renderDrill(list, i + 1);
@@ -825,7 +888,7 @@ const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i-
 // 「漢字(よみ)」をふりがな付きの表示に、【語】を下線にする
 function examText(q) {
   // 用語カード：語を大きく、ふりがなは語の上に
-  if (q.term) return `${esc(t("cardQ"))}<br><span class="term">${S.getFurigana() && q.reading && q.reading !== q.term ? `<ruby>${esc(q.term)}<rt>${esc(q.reading)}</rt></ruby>` : esc(q.term)}</span>`;
+  if (q.term) return `${tx("cardQ")}<br><span class="term">${S.getFurigana() && q.reading && q.reading !== q.term ? `<ruby>${esc(q.term)}<rt>${esc(q.reading)}</rt></ruby>` : esc(q.term)}</span>`;
   // ふりがなが「全文ひらがな」の問題（一問一答）は、漢字の文の下に、ひらがなの行をそえる
   if (S.getFurigana() && q.question_furigana && !/[一-龯々]/.test(q.question_furigana) && q.question_furigana !== q.question_ja)
     return esc(q.question_ja).replace(/【(.+?)】/g, "<u>$1</u>").replace(/\n/g, "<br>") +
@@ -870,18 +933,20 @@ function startExam(set) {
 function renderExamQ(set, qs, i, results) {
   if (i >= qs.length) return renderExamResult(set, qs, results);
   const q = qs[i];
-  q.plays ||= 0;   // 聞いた回数は問題に持たせる（ふりがなを切り替えて描き直しても、2回までのまま）
+  q.plays ||= 0;
+  // 漢字の読み・書き方の問題は、選択肢にふりがなを付けると答えが分かってしまうので付けない
+  const choiceRuby = !/漢字|表記|読み|用法|語彙/.test(q.section || "");   // 聞いた回数は問題に持たせる（ふりがなを切り替えて描き直しても、2回までのまま）
   const answered = () => results.some(r => r.id === q.id);
   show(`
-    <button class="back link">← ${esc(t("home"))}</button>
+    <button class="back link">← ${tx("home")}</button>
     <div class="row between"><h1>📝 ${esc(set.name)}（${i + 1}/${qs.length}）</h1>
-      <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${esc(t("furigana"))}</label></div>
-    <p class="note">${esc(q.section)}</p>
-    ${q.script ? `<button id="play" class="primary">▶ ${esc(t("listen"))}（${esc(t("upTo2"))}）</button>` : ""}
+      <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${tx("furigana")}</label></div>
+    <p class="note">${jr(q.section)}</p>
+    ${q.script ? `<button id="play" class="primary">▶ ${tx("listen")}（${tx("upTo2")}）</button>` : ""}
     <section class="card"><p class="big exq">${examText(q)}</p>${q.say ? sayBtn(q.say) : ""}</section>
     ${q.choicesShown
-      ? `<div class="answers ${q.choicesShown.length === 2 ? "ox" : ""}">${q.choicesShown.map((c, k) => `<button class="ans" data-k="${k}">${q.choicesShown.length > 2 ? k + 1 + ". " : ""}${esc(c)}</button>`).join("")}</div>`
-      : `<button id="reveal" class="primary">${esc(t("showAnswer"))}</button>`}
+      ? `<div class="answers ${q.choicesShown.length === 2 ? "ox" : ""}">${q.choicesShown.map((c, k) => `<button class="ans" data-k="${k}">${q.choicesShown.length > 2 ? k + 1 + ". " : ""}${choiceRuby ? jr(c) : esc(c)}</button>`).join("")}</div>`
+      : `<button id="reveal" class="primary">${tx("showAnswer")}</button>`}
     <div id="res"></div>`);
   $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
   // こたえを見て自分で〇つけする問題
@@ -890,9 +955,9 @@ function renderExamQ(set, qs, i, results) {
     $rev.remove();
     const ex = L() === "ja" ? "" : q[`explain_${L()}`] || q.explain_en;
     const $r = document.getElementById("res");
-    $r.innerHTML = `<section class="card"><p class="big"><b>${esc(q.answer_text)}</b></p>
-        ${ex ? `<p>${esc(ex)}</p>` : ""}<p class="note">${esc(q.explain_ja)}</p></section>
-      <div class="row"><button id="selfok" class="sub">✅ ${esc(t("gotIt"))}</button><button id="selfng" class="sub">🔁 ${esc(t("notYet"))}</button></div>`;
+    $r.innerHTML = `<section class="card"><p class="big"><b>${jr(q.answer_text)}</b></p>
+        ${ex ? `<p>${esc(ex)}</p>` : ""}<p class="note">${jr(q.explain_ja)}</p></section>
+      <div class="row"><button id="selfok" class="sub">✅ ${tx("gotIt")}</button><button id="selfng" class="sub">🔁 ${tx("notYet")}</button></div>`;
     $r.scrollIntoView({ behavior: "smooth", block: "start" });
     const go = ok => { if (!answered()) results.push({ id: q.id, ok }); renderExamQ(set, qs, i + 1, results); };
     document.getElementById("selfok").onclick = () => go(true);
@@ -910,11 +975,11 @@ function renderExamQ(set, qs, i, results) {
     const ex = L() === "ja" ? q.explain_ja : q[`explain_${L()}`] || q.explain_en;
     document.getElementById("res").innerHTML = `
       <section class="card result ${ok ? "ok" : ""}">
-        <p class="big">${ok ? "✅ " + esc(t("great")) : "🔁 " + esc(t("examWrong"))}</p>
-        <p>${esc(ex)}</p>${L() !== "ja" ? `<p class="ja">${esc(q.explain_ja)}</p>` : ""}
-        ${q.script ? `<details><summary class="note">${esc(t("showText"))}</summary><p>${esc(q.script).replace(/\n/g, "<br>")}</p></details>` : ""}
+        <p class="big">${ok ? "✅ " + tx("great") : "🔁 " + tx("examWrong")}</p>
+        <p>${L() === "ja" ? jr(q.explain_ja) : esc(ex)}</p>${L() !== "ja" ? `<p class="ja">${jr(q.explain_ja)}</p>` : ""}
+        ${q.script ? `<details><summary class="note">${tx("showText")}</summary><p>${esc(q.script).replace(/\n/g, "<br>")}</p></details>` : ""}
       </section>
-      <button id="next" class="primary">${esc(t("next"))} →</button>`;
+      <button id="next" class="primary">${tx("next")} →</button>`;
     document.getElementById("next").onclick = () => renderExamQ(set, qs, i + 1, results);
     document.getElementById("res").scrollIntoView({ behavior: "smooth", block: "start" });   // 解説と「つぎへ」が見えるように
   });
@@ -927,8 +992,8 @@ function renderExamResult(set, qs, results) {
     <h1>📝 ${esc(set.name)}</h1>
     <section class="card result ${n >= qs.length * 0.7 ? "ok" : ""}"><p class="big">${n} / ${qs.length}</p>
       <p>${esc(t(n >= qs.length * 0.7 ? "examGood" : "examKeep"))}</p></section>
-    <button id="again" class="primary">🔁 ${esc(t("examAgain"))}</button>
-    <button id="home" class="link">${esc(t("home"))}</button>`);
+    <button id="again" class="primary">🔁 ${tx("examAgain")}</button>
+    <button id="home" class="link">${tx("home")}</button>`);
   document.getElementById("again").onclick = () => startExam(set);
   document.getElementById("home").onclick = renderHome;
 }
@@ -937,20 +1002,20 @@ function renderExamResult(set, qs, results) {
 function renderReview() {
   const cards = S.dueCards();
   if (!cards.length) {
-    show(`<h1>${bi("reviewToday")}</h1><p>${bi("noReview")}</p><button class="primary" id="home">${esc(t("home"))}</button>`);
+    show(`<h1>${bi("reviewToday")}</h1><p>${bi("noReview")}</p><button class="primary" id="home">${tx("home")}</button>`);
     document.getElementById("home").onclick = renderHome;
     return;
   }
   const c = cards[0];
   show(`
-    <button class="back link">← ${esc(t("home"))}</button>
+    <button class="back link">← ${tx("home")}</button>
     <h1>${bi("reviewToday")}（${cards.length}）</h1>
     <section class="card"><p>${bi("howToSay")}</p><p class="big">${esc(c.meaning || "…")}</p></section>
-    <button id="say" class="primary big">🎙 ${esc(t("speak"))}</button>
-    <button id="reveal" class="sub">${esc(t("showAnswer"))}</button>
+    <button id="say" class="primary big">🎙 ${tx("speak")}</button>
+    <button id="reveal" class="sub">${tx("showAnswer")}</button>
     <section id="ans" class="card" hidden><p class="big">${sayBtn(c.better_furigana || c.better)}<b>${esc(c.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(c.better_furigana)}</p>` : ""}
-      <div class="row"><button id="ok" class="sub">✅ ${esc(t("gotIt"))}</button><button id="ng" class="sub">🔁 ${esc(t("notYet"))}</button></div></section>`);
+      <div class="row"><button id="ok" class="sub">✅ ${tx("gotIt")}</button><button id="ng" class="sub">🔁 ${tx("notYet")}</button></div></section>`);
   $app.querySelector(".back").onclick = renderHome;
   document.getElementById("say").onclick = () => renderRetry(null, { better: c.better, better_furigana: c.better_furigana, better_meaning: c.meaning }, c.id);
   document.getElementById("reveal").onclick = () => { document.getElementById("ans").hidden = false; };
@@ -975,29 +1040,29 @@ function renderSettings() {
   const sessions = S.getSessions().slice().reverse();
   const totalSec = sessions.reduce((a, s) => a + s.seconds, 0), totalYen = sessions.reduce((a, s) => a + cost(s), 0);
   show(`
-    <button class="back link">← ${esc(t("home"))}</button>
-    <h1>${esc(t("settings"))}</h1>
+    <button class="back link">← ${tx("home")}</button>
+    <h1>${tx("settings")}</h1>
     <section class="card ${S.getKey() ? "" : "goal"}">
-      <h2>${esc(t("easySetup"))}</h2>
+      <h2>${tx("easySetup")}</h2>
       <p class="note">${esc(t(S.getKey() ? "keyReady" : "easySetupNote"))}</p>
-      <button id="auto" class="primary">🔑 ${esc(t("easySetupBtn"))}</button>
+      <button id="auto" class="primary">🔑 ${tx("easySetupBtn")}</button>
       <p id="autoStatus" class="status"></p>
-      <details><summary class="note">${esc(t("manualKey"))}</summary>
-        <label>${esc(t("devKey"))}<input id="key" type="password" value="${esc(S.getKey())}" autocomplete="off"></label>
-        <button id="saveKey" class="sub">${esc(t("save"))}</button>
+      <details><summary class="note">${tx("manualKey")}</summary>
+        <label>${tx("devKey")}<input id="key" type="password" value="${esc(S.getKey())}" autocomplete="off"></label>
+        <button id="saveKey" class="sub">${tx("save")}</button>
       </details>
-      <p class="note">${esc(t("devKeyNote"))}</p>
+      <p class="note">${tx("devKeyNote")}</p>
     </section>
     <section class="card">
-      <h2>${esc(t("records"))}</h2>
-      <p>${sessions.length} ${esc(t("times"))} ・ ${(totalSec / 60).toFixed(1)} ${esc(t("minutes"))} ・ ${esc(t("estCost"))} ${totalYen.toFixed(1)}円
-        ${totalSec ? `（${(totalYen / (totalSec / 60)).toFixed(2)}円/${esc(t("minutes"))}）` : ""}</p>
-      <table class="rec"><tr><th>${esc(t("date"))}</th><th>${esc(t("scene"))}</th><th>${esc(t("seconds"))}</th><th>${esc(t("goalShort"))}</th><th>円</th></tr>
+      <h2>${tx("records")}</h2>
+      <p>${sessions.length} ${tx("times")} ・ ${(totalSec / 60).toFixed(1)} ${tx("minutes")} ・ ${tx("estCost")} ${totalYen.toFixed(1)}円
+        ${totalSec ? `（${(totalYen / (totalSec / 60)).toFixed(2)}円/${tx("minutes")}）` : ""}</p>
+      <table class="rec"><tr><th>${tx("date")}</th><th>${tx("scene")}</th><th>${tx("seconds")}</th><th>${tx("goalShort")}</th><th>円</th></tr>
       ${sessions.map(s => `<tr><td>${esc(fmtAt(s.at))}</td><td>${esc(s.type === "exam" ? `📝 ${s.exam} ${s.score}/${s.total}` : s.type === "drill" ? "👂 " + s.drill : SCENES.find(x => x.id === s.scene)?.title_ja.slice(0, 10) || s.scene)}</td>
         <td>${s.seconds}</td><td>${s.type === "drill" ? (s.ok ? "○" : "△") : s.feedback ? (s.feedback.goal_achieved ? "○" : "△") : "−"}</td><td>${cost(s).toFixed(1)}</td></tr>`).join("")}
       </table>
-      <button id="export" class="sub">${esc(t("export"))}</button>
-      <button id="wipe" class="sub danger">${esc(t("deleteRecords"))}</button>
+      <button id="export" class="sub">${tx("export")}</button>
+      <button id="wipe" class="sub danger">${tx("deleteRecords")}</button>
     </section>
     <section class="card"><h2>${bi("chooseLang")}</h2><div class="row">
       ${[["ja", "日本語"], ["en", "English"], ["vi", "Tiếng Việt"]].map(([v, n]) => `<button class="choice ${L() === v ? "on" : ""}" data-lang="${v}">${n}</button>`).join("")}
