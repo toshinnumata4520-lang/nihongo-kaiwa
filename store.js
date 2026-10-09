@@ -25,8 +25,11 @@ export function sceneStatus(sceneId) {
   return "trying";
 }
 
+// 日付は端末の現地時間で数える（世界標準時だと、日本の朝9時前が前日扱いになる）
+export const localDate = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
 export function practiceDays() {
-  return new Set(getSessions().map(s => s.at.slice(0, 10))).size;
+  return new Set(getSessions().map(s => localDate(new Date(s.at)))).size;
 }
 
 // 復習カード：直した言い方を、翌日・3日後・1週間後に出す
@@ -38,7 +41,7 @@ export function addCard(card) {
   write(K.cards, cards);
 }
 export function dueCards() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   return getCards().filter(c => c.step < STEPS.length && c.due <= today);
 }
 export function gradeCard(id, ok) {
@@ -49,6 +52,6 @@ export function gradeCard(id, ok) {
   else c.due = addDays(new Date(), 1);
   write(K.cards, cards);
 }
-function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return localDate(x); }
 
 export function clearAll() { for (const k of Object.values(K)) if (k !== K.key) localStorage.removeItem(k); }

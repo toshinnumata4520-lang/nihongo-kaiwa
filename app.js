@@ -19,7 +19,20 @@ const bi = k => L() === "ja" ? esc(t(k)) : `${esc(t(k))}<span class="ja">${esc(t
 const sceneTitle = sc => L() === "ja" ? sc.title_ja : sc.title?.[L()] || sc.title_ja;
 const sceneGoal = sc => L() === "ja" ? sc.goal_ja : sc.goal?.[L()] || sc.goal_ja;
 
-function show(html) { $app.innerHTML = html; window.scrollTo(0, 0); }
+function show(html) {
+  $app.innerHTML = html; window.scrollTo(0, 0);
+  $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
+}
+
+// お手本の声（ブラウザの読み上げ。端末の中で読み上げるだけで、外には送らない）
+function say(text) {
+  if (!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; u.rate = 0.85;
+  const v = speechSynthesis.getVoices().find(v => v.lang === "ja-JP"); if (v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+const sayBtn = text => `<button class="say" data-say="${esc(text)}" aria-label="listen">🔊</button>`;
 
 // ───── 初回設定 ─────
 function renderSetup() {
@@ -84,7 +97,7 @@ function renderHome() {
 function phraseHtml(p) {
   const furi = S.getFurigana();
   const tr = L() === "ja" ? p.en : p[L()] || p.en;
-  return `<li class="phrase"><span class="jp">${esc(p.ja)}</span>
+  return `<li class="phrase">${sayBtn(p.ja)}<span class="jp">${esc(p.ja)}</span>
     ${furi ? `<span class="furi">${esc(p.furigana)}</span>` : ""}
     <span class="tr">${esc(tr)}</span></li>`;
 }
@@ -167,17 +180,24 @@ function renderTalk(sc) {
       // 学習者が話し始めたら、直前のAIの発言は区切る
       if (who === "me") { const prev = transcript[transcript.length - 2]; if (prev) prev.done = true; }
     },
-    onStatus: (s, isErr, detail) => { $status.textContent = t(statusText[s] || s) + (detail ? ` (${detail})` : ""); $status.classList.toggle("err", !!isErr); },
+    onStatus: (s, isErr, detail) => {
+      $status.textContent = t(statusText[s] || s) + (detail ? ` (${detail})` : ""); $status.classList.toggle("err", !!isErr);
+      if (s === "listening" && !timer) startTimer();           // 5分は、つながって話せる状態になってから数える
+      if (s === "mic-denied") { finished = true; clearInterval(timer); }
+    },
     onUsage: u => usage.push(u),
     onClose: () => finish(),
   });
 
   let left = MAX_SECONDS;
-  timer = setInterval(() => {
-    left--;
-    document.getElementById("clock").textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
-    if (left <= 0) finish();
-  }, 1000);
+  function startTimer() {
+    timer = setInterval(() => {
+      left--;
+      const $c = document.getElementById("clock");
+      if ($c) $c.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+      if (left <= 0) finish();
+    }, 1000);
+  }
 
   document.getElementById("hint").onclick = () => {
     const h = document.getElementById("hintText");
@@ -205,22 +225,25 @@ function renderTalk(sc) {
 // ───── 直し ─────
 async function renderFeedback(sc, transcript, seconds, liveUsage) {
   show(`<p class="status">${esc(t("checking"))}</p>`);
-  let fb = null, textUsage = {};
+  let fb = null, textUsage = {}, failed = false;
+  const spoke = transcript.some(m => m.who === "me");
   try {
-    if (transcript.some(m => m.who === "me")) {
+    if (spoke) {
       const r = await makeFeedback(S.getKey(), sc, transcript, L());
       fb = r.result; textUsage = r.usage;
     }
-  } catch (e) { console.error(e); }
+  } catch (e) { console.error(e); failed = true; }
   S.addSession({ scene: sc.id, at: new Date().toISOString(), seconds: Math.round(seconds), transcript, feedback: fb,
     usage: { live: liveUsage, text: textUsage }, models: { live: LIVE_MODEL, text: TEXT_MODEL } });
 
   if (!fb) {
-    show(`<p>${esc(t("noSpeech"))}</p><button class="primary" id="home">${esc(t("home"))}</button>`);
+    show(`<p>${esc(t(failed ? "error" : "noSpeech"))}</p><button class="primary" id="home">${esc(t("home"))}</button>`);
     document.getElementById("home").onclick = renderHome;
     return;
   }
   const f = fb.fix;
+  // 直しは言い直しが成功しなくても復習に入れる（苦手な人ほど復習が必要なため）
+  if (f.better) S.addCard({ scene: sc.id, better: f.better, better_furigana: f.better_furigana, meaning: f.better_meaning || "" });
   const why = L() === "ja" ? f.why_ja : f.why;
   show(`
     <h1>${bi("result")}</h1>
@@ -231,7 +254,7 @@ async function renderFeedback(sc, transcript, seconds, liveUsage) {
     <section class="card">
       <h2>${bi("oneFix")}</h2>
       ${f.said ? `<p class="said">${esc(t("youSaid"))}：${esc(f.said)}</p>` : ""}
-      <p class="better">${esc(t("better"))}：<b>${esc(f.better)}</b></p>
+      <p class="better">${sayBtn(f.better)}${esc(t("better"))}：<b>${esc(f.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(f.better_furigana)}</p>` : ""}
       <p class="why">${esc(why)}</p>
       ${L() !== "ja" ? `<p class="ja">${esc(f.why_ja)}</p>` : ""}
@@ -262,7 +285,7 @@ function renderRetry(sc, fix, fromReview = null) {
     <h1>${bi("retry")}</h1>
     <p>${bi("retryPrompt")}</p>
     <section class="card">
-      <p class="big"><b>${esc(fix.better)}</b></p>
+      <p class="big">${sayBtn(fix.better)}<b>${esc(fix.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(fix.better_furigana)}</p>` : ""}
       ${fix.better_meaning ? `<p class="tr">${esc(fix.better_meaning)}</p>` : ""}
     </section>
@@ -271,17 +294,18 @@ function renderRetry(sc, fix, fromReview = null) {
     <p id="res" class="status"></p>`);
   $app.querySelector(".back").onclick = renderHome;
   const $res = document.getElementById("res");
+  let tries = 0;
   const judge = async said => {
     if (!said) { $res.textContent = t("notHeard"); return; }
     $res.textContent = t("checking");
     try {
       const { result } = await judgeRetry(S.getKey(), fix.better, said);
       $res.innerHTML = `${esc(said)}<br><b>${result.ok ? "✅ " + esc(t("great")) : "🔁 " + esc(t("again"))}</b> ${esc(result.comment)}`;
-      if (result.ok) {
-        if (fromReview) { S.gradeCard(fromReview, true); setTimeout(renderReview, 1500); }
-        else { S.addCard({ scene: sc.id, better: fix.better, better_furigana: fix.better_furigana, meaning: fix.better_meaning || "" });
-          $res.insertAdjacentHTML("beforeend", `<br><button class="primary" id="done">${esc(t("home"))}</button>`);
-          document.getElementById("done").onclick = renderHome; }
+      tries++;
+      if (fromReview && (result.ok || tries >= 2)) { S.gradeCard(fromReview, result.ok); setTimeout(renderReview, 1500); return; }
+      if (result.ok || tries >= 2) {   // 2回うまくいかなければ、くり返させずに先へ進める
+        $res.insertAdjacentHTML("beforeend", `<br><button class="primary" id="done">${esc(t("home"))}</button>`);
+        document.getElementById("done").onclick = renderHome;
       }
     } catch (e) { console.error(e); $res.textContent = t("error"); }
   };
@@ -309,7 +333,7 @@ function renderReview() {
     <section class="card"><p>${bi("howToSay")}</p><p class="big">${esc(c.meaning || "…")}</p></section>
     <button id="say" class="primary big">🎙 ${esc(t("speak"))}</button>
     <button id="reveal" class="sub">${esc(t("showAnswer"))}</button>
-    <section id="ans" class="card" hidden><p class="big"><b>${esc(c.better)}</b></p>
+    <section id="ans" class="card" hidden><p class="big">${sayBtn(c.better)}<b>${esc(c.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(c.better_furigana)}</p>` : ""}
       <div class="row"><button id="ok" class="sub">✅ ${esc(t("gotIt"))}</button><button id="ng" class="sub">🔁 ${esc(t("notYet"))}</button></div></section>`);
   $app.querySelector(".back").onclick = renderHome;
