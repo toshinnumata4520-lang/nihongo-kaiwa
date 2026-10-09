@@ -88,6 +88,8 @@ const T = {
   lvCardNote:   { ja: "じょうきょうだけ 見て 話します。AIが 予想外の ことを 1つ 言います。", en: "Only the situation is shown. The AI will say one unexpected thing.", vi: "Chỉ xem tình huống rồi nói. AI sẽ nói một điều bất ngờ." },
   examTitle:    { ja: "試験たいさく", en: "Test practice", vi: "Luyện thi" },
   examNote:     { ja: "形式に あわせて 作った 練習問題です（公式の 問題では ありません）", en: "Practice questions written in the official format (not official questions)", vi: "Câu hỏi luyện tập theo định dạng chính thức (không phải đề chính thức)" },
+  cardQ:        { ja: "この ことばの いみは？", en: "What does this word mean?", vi: "Từ này nghĩa là gì?" },
+  usageQ:       { ja: "{w} の 使い方が 正しい 文は どれですか。下の 4つの 文は ぜんぶ {w} を 使って います。正しい 使い方の 文を 1つ えらんで ください。", en: "Which sentence uses {w} correctly? All 4 sentences use {w}. Choose the one that uses it correctly.", vi: "Câu nào dùng {w} đúng? Cả 4 câu đều dùng {w}. Hãy chọn câu dùng đúng." },
   voiceLoading: { ja: "声を つくって います…（はじめは 数秒）", en: "Preparing the voice… (a few seconds the first time)", vi: "Đang tạo giọng nói… (lần đầu mất vài giây)" },
   voiceRetry:   { ja: "声が 出ませんでした。もう一度 ▶ を 押して ください", en: "No sound. Please press ▶ again", vi: "Không có tiếng. Hãy bấm ▶ lại" },
   examGroup2:   { ja: "仕事の 試験（特定技能2号・介護福祉士）", en: "Job exams (SSW No.2, care worker)", vi: "Thi nghề (Kỹ năng đặc định số 2, hộ lý)" },

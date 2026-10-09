@@ -32,12 +32,14 @@ function show(html) {
 const sayCache = new Map();
 let sayCtx = null;
 async function say(text) {
+  // 短い言葉（用語カードなど）は、AIの声だと発音が崩れたり説明をしゃべったりするので、スマホの読み上げで読む
+  if (text.replace(/[。、！？\s]/g, "").length <= 10) { sayLocal(text); return; }
   if (S.getKey() && !ttsBroken) {
     try {
       sayCtx ||= new (window.AudioContext || window.webkitAudioContext)();
       await sayCtx.resume();
       if (!sayCache.has(text)) {
-        const a = await tts(S.getKey(), text, "日本語の先生が、はっきり自然に言う", "Kore");
+        const a = await tts(S.getKey(), text, null, "Kore");   // 話し方の指示は付けない（指示を読んだり説明をしゃべったりするのを防ぐ）
         let buf;
         if (a.isWav) buf = await sayCtx.decodeAudioData(a.bytes.buffer.slice(0));
         else {
@@ -612,6 +614,14 @@ const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i-
 
 // 「漢字(よみ)」をふりがな付きの表示に、【語】を下線にする
 function examText(q) {
+  // 用語カード：語を大きく、ふりがなは語の上に
+  if (q.term) return `${esc(t("cardQ"))}<br><span class="term">${S.getFurigana() ? `<ruby>${esc(q.term)}<rt>${esc(q.reading)}</rt></ruby>` : esc(q.term)}</span>`;
+  // 用法：4つの文が全部その語を使っていて、正しい使い方の文を選ぶ形だと分かるように指示を言いかえる
+  if (/用法/.test(q.section || "") && /【(.+?)】/.test(q.question_ja)) {
+    const w = q.question_ja.match(/【(.+?)】/)[1];
+    const furiW = (q.question_furigana || "").match(/【(.+?)】/)?.[1] || w;
+    return esc(t("usageQ")).replace("{w}", `<u>${S.getFurigana() ? esc(furiW).replace(/([一-龯々〆ヶ]+)\(([ぁ-んー]+)\)/g, "<ruby>$1<rt>$2</rt></ruby>") : esc(w)}</u>`);
+  }
   // ふりがなが「全文ひらがな」の問題（一問一答）は、漢字の文の下に、ひらがなの行をそえる
   if (S.getFurigana() && q.question_furigana && !/\([ぁ-ん]/.test(q.question_furigana) && q.question_furigana !== q.question_ja)
     return esc(q.question_ja).replace(/【(.+?)】/g, "<u>$1</u>").replace(/\n/g, "<br>") +

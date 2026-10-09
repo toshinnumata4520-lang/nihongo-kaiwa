@@ -112,3 +112,5 @@ rt { font-size: 11px; color: var(--accent); }
 .say { float: right; padding: 4px 10px; margin-left: 8px; font-size: 18px; line-height: 1.2; }
 .rec { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
 .rec th, .rec td { border-bottom: 1px solid var(--line); padding: 4px; text-align: left; }
+.term { display: block; font-size: 34px; font-weight: 800; margin-top: 10px; }
+.term rt { font-size: 14px; }
