@@ -2,7 +2,7 @@ import { t, tja, getLang, setLang } from "./i18n.js";
 import { SCENES } from "./scenes.js";
 import { SITUATIONS } from "./situations.js";
 import { SAFETY_RULES, mask } from "./safety.js";
-import { startConversation, stopConversation, sendNote, LIVE_MODEL } from "./live.js";
+import { startConversation, stopConversation, sendNote, liveSpeak, LIVE_MODEL } from "./live.js";
 import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js";
 import { DRILLS, DRILL_INDUSTRIES } from "./drills.js";
 import { EXAMS } from "./exams.js";
@@ -39,7 +39,7 @@ async function say(text) {
       sayCtx ||= new (window.AudioContext || window.webkitAudioContext)();
       await sayCtx.resume();
       if (!sayCache.has(text)) {
-        const a = await tts(S.getKey(), text, null, "Kore");   // 話し方の指示は付けない（指示を読んだり説明をしゃべったりするのを防ぐ）
+        const a = await liveSpeak(S.getKey(), text, { style: "日本語の先生が、はっきり自然に" });
         let buf;
         if (a.isWav) buf = await sayCtx.decodeAudioData(a.bytes.buffer.slice(0));
         else {
@@ -551,7 +551,7 @@ async function playVoice(d, slow) {
     await drillCtx.resume();
     if (!audioCache.has(ck)) {
       const style = slow ? "外国人にもわかるように、とてもゆっくり、はっきり言う" : STYLE_PROMPT[d.style];
-      const a = await tts(S.getKey(), d.say_kana || d.say, style, d.voice);   // 読み間違いを防ぐため、ひらがなで渡す
+      const a = await liveSpeak(S.getKey(), d.say, { style, reading: d.say_kana, voice: d.voice });   // 漢字の文に読み方を添えて、会話と同じAIに読ませる
       let buf;
       if (a.isWav) buf = await drillCtx.decodeAudioData(a.bytes.buffer.slice(0));
       else {

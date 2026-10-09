@@ -84,6 +84,44 @@ export async function startConversation({ key, systemText, openingText, onText, 
   return true;
 }
 
+// せりふの読み上げ：会話と同じ Live API に、文を一字一句そのまま読ませて、声（24kHz・16bit PCM）だけを受け取る。
+// 会話で使えている仕組みなので、TTS専用の窓口より確実。話し方（早口・関西弁など）と読み方も指示する
+export function liveSpeak(key, text, { style = "", reading = "", voice = "" } = {}) {
+  const attempt = withVoice => new Promise((resolve, reject) => {
+    const ws = new WebSocket(`${WS_URL}?key=${encodeURIComponent(key)}`);
+    const chunks = []; let done = false;
+    const timer = setTimeout(() => { if (!done) { done = true; try { ws.close(1000); } catch {} reject(new Error("timeout")); } }, 20000);
+    ws.onopen = () => ws.send(JSON.stringify({ setup: {
+      model: `models/${LIVE_MODEL}`,
+      systemInstruction: { parts: [{ text:
+        "あなたは日本語の読み上げ係です。ユーザーから届く日本語のせりふを、一字一句そのまま、指定された話し方で声に出して読みます。" +
+        "せりふ以外のこと（あいさつ・説明・感想・返事）は一切言いません。せりふを変えたり足したりしません。" } ] },
+      generationConfig: { responseModalities: ["AUDIO"],
+        ...(withVoice && voice ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } : {}) },
+    } }));
+    ws.onmessage = async e => {
+      const msg = JSON.parse(typeof e.data === "string" ? e.data : await e.data.text());
+      if (msg.setupComplete) {
+        ws.send(JSON.stringify({ realtimeInput: { text:
+          `話し方：${style || "自然に"}\n${reading ? `読み方：${reading}\n` : ""}せりふ：${text}` } }));
+        return;
+      }
+      const c = msg.serverContent;
+      for (const p of c?.modelTurn?.parts || []) if (p.inlineData?.data) chunks.push(p.inlineData.data);
+      if (c?.turnComplete && !done) {
+        done = true; clearTimeout(timer); try { ws.close(1000); } catch {}
+        let total = 0; const parts = chunks.map(b => { const s = atob(b); total += s.length; return s; });
+        const bytes = new Uint8Array(total); let o = 0;
+        for (const s of parts) { for (let i = 0; i < s.length; i++) bytes[o++] = s.charCodeAt(i); }
+        bytes.length ? resolve({ bytes, rate: 24000, isWav: false }) : reject(new Error("no audio"));
+      }
+    };
+    ws.onclose = e => { if (!done) { done = true; clearTimeout(timer); reject(new Error(`closed ${e.code} ${e.reason || ""}`)); } };
+  });
+  // 声の指定が受け付けられないときは、指定なしでやり直す
+  return attempt(true).catch(err => voice ? attempt(false) : Promise.reject(err));
+}
+
 // 学習者のボタン操作（ヒント・ゆっくり）を、AIへの指示として送る
 export function sendNote(text) {
   const st = state;
