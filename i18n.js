@@ -24,6 +24,17 @@ const T = {
   slower:       { ja: "ゆっくり", en: "Slower", vi: "Chậm hơn" },
   listening:    { ja: "🎙 話して ください", en: "🎙 Please speak", vi: "🎙 Hãy nói" },
   connecting:   { ja: "つないで います…", en: "Connecting…", vi: "Đang kết nối…" },
+  deleteKeyConfirm: { ja: "キーを けしますか？", en: "Delete the key?", vi: "Xóa khóa?" },
+  scafFailed:   { ja: "てつだいを 用意 できませんでした。状況カードを 見ながら 話して ください", en: "Couldn't prepare the helper. Please talk while looking at the situation card", vi: "Không chuẩn bị được phần trợ giúp. Hãy vừa xem thẻ tình huống vừa nói" },
+  judgeFailed:  { ja: "AIの チェックが できませんでした。お手本と くらべて ください", en: "The AI check failed. Please compare with the model answer", vi: "AI không kiểm tra được. Hãy so sánh với câu mẫu" },
+  drillDone:    { ja: "この 業種の 問題は ぜんぶ おわりました", en: "You finished all the drills for this job", vi: "Bạn đã làm xong tất cả bài của ngành này" },
+  reviewPrompt: { ja: "この 意味の 日本語を 言って ください", en: "Say this in Japanese", vi: "Hãy nói câu này bằng tiếng Nhật" },
+  keyInvalid:   { ja: "AIの キーが ただしく ありません。せっていで かんたん設定を やりなおして ください", en: "The AI key is not valid. Please redo the easy setup in Settings", vi: "Khóa AI không hợp lệ. Hãy làm lại cài đặt nhanh trong phần Cài đặt" },
+  connLost:     { ja: "つながりが 切れました", en: "The connection was lost", vi: "Mất kết nối" },
+  reconnect:    { ja: "もう一度 つなぐ", en: "Connect again", vi: "Kết nối lại" },
+  startFailed:  { ja: "この ブラウザでは 会話を はじめられません。Safari か Chrome で ひらいて ください", en: "Couldn't start the conversation in this browser. Please open it in Safari or Chrome", vi: "Không bắt đầu được hội thoại trên trình duyệt này. Hãy mở bằng Safari hoặc Chrome" },
+  checkAgain:   { ja: "もう一度 チェックする", en: "Check again", vi: "Kiểm tra lại" },
+  srNetwork:    { ja: "声の 入力が つながりません。電波を かくにんするか、書いて ください", en: "Voice input couldn't connect. Check your signal, or type instead", vi: "Không kết nối được nhập giọng nói. Hãy kiểm tra sóng hoặc gõ chữ" },
   micDenied:    { ja: "マイクが つかえません。せってい を かくにん してください", en: "Microphone is not allowed. Please check your settings", vi: "Không dùng được micro. Hãy kiểm tra cài đặt" },
   timeUp:       { ja: "じかんに なりました", en: "Time is up", vi: "Hết giờ" },
   checking:     { ja: "チェック して います…", en: "Checking…", vi: "Đang kiểm tra…" },
@@ -98,12 +109,12 @@ const T = {
   cardQ:        { ja: "この ことばの いみは？", en: "What does this word mean?", vi: "Từ này nghĩa là gì?" },
   voiceLoading: { ja: "声を つくって います…（はじめは 数秒）", en: "Preparing the voice… (a few seconds the first time)", vi: "Đang tạo giọng nói… (lần đầu mất vài giây)" },
   voiceRetry:   { ja: "声が 出ませんでした。もう一度 ▶ を 押して ください", en: "No sound. Please press ▶ again", vi: "Không có tiếng. Hãy bấm ▶ lại" },
-  examGroup2:   { ja: "仕事の 試験（特定技能2号・介護福祉士）", en: "Job exams (SSW No.2, care worker)", vi: "Thi nghề (Kỹ năng đặc định số 2, hộ lý)" },
+  examGroup2:   { ja: "仕事の 試験（特定技能2号・介護福祉士）", en: "Job exams (SSW No.2, care worker)", vi: "Thi nghề (Kỹ năng đặc định số 2, chuyên viên chăm sóc Kaigo)" },
   upTo2:        { ja: "2回まで", en: "up to 2 times", vi: "tối đa 2 lần" },
   examWrong:    { ja: "ざんねん。正しい こたえは 緑の ボタン", en: "Not quite. The right answer is the green button", vi: "Chưa đúng. Đáp án đúng là nút màu xanh" },
   examGood:     { ja: "よく できました！ この ちょうしで", en: "Great job! Keep it up", vi: "Làm tốt lắm! Cứ tiếp tục nhé" },
   examKeep:     { ja: "まちがえた ところを もう一度 やって みましょう", en: "Let's try the ones you missed again", vi: "Hãy thử lại những câu sai nhé" },
-  examAgain:    { ja: "もう一回（べつの 10問）", en: "Again (10 new questions)", vi: "Làm lại (10 câu khác)" },
+  examAgain:    { ja: "もう一回", en: "Again", vi: "Làm lại" },
   correctJa:    { ja: "正しい 日本語（ぜんぶ）", en: "Correct Japanese (all your lines)", vi: "Tiếng Nhật đúng (tất cả câu của bạn)" },
   missing:      { ja: "（言えなかった 大事な 一言）", en: "(An important line you didn't say)", vi: "(Câu quan trọng bạn chưa nói)" },
   drillTitle:   { ja: "聞いて くりかえす", en: "Listen and repeat back", vi: "Nghe và nhắc lại" },
@@ -127,9 +138,11 @@ const T = {
   deleteConfirm:{ ja: "きろくを ぜんぶ けします。いいですか？", en: "Delete all records?", vi: "Xóa toàn bộ lịch sử?" },
 };
 
-let lang = localStorage.getItem("nk.lang") || "ja";
+const ls = (() => { try { const s = window.localStorage; s.getItem("x"); return s; } catch { return null; } })();
+let lang = ls?.getItem("nk.lang") || (/^vi/i.test(navigator.language) ? "vi" : /^ja/i.test(navigator.language) ? "ja" : /^en/i.test(navigator.language) ? "en" : "ja");
+document.documentElement.lang = lang;
 export const getLang = () => lang;
-export function setLang(l) { lang = l; localStorage.setItem("nk.lang", l); }
+export function setLang(l) { lang = l; document.documentElement.lang = l; try { ls?.setItem("nk.lang", l); } catch {} }
 // 指定言語の文。日本語以外を選んでいる人には、日本語も下に小さく出せるよう両方返す関数も用意
 export const t = k => T[k]?.[lang] ?? T[k]?.ja ?? k;
 export const tja = k => T[k]?.ja ?? k;

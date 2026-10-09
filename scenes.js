@@ -23,11 +23,11 @@ export const SCENES = [
     "opening_line": "はい、山田です。",
     "key_phrases": [
       {
-        "ja": "すみません、電車が遅れていて、10分ぐらい遅れます。",
-        "furigana": "すみません、でんしゃがおくれていて、じゅっぷんぐらいおくれます。",
-        "romaji": "Sumimasen, densha ga okurete ite, juppun gurai okuremasu.",
-        "en": "I'm sorry, the train is delayed, so I'll be about 10 minutes late.",
-        "vi": "Xin lỗi, tàu đang bị trễ nên tôi sẽ đến muộn khoảng 10 phút."
+        "ja": "すみません、電車が止まっていて、40分ぐらい遅れます。",
+        "furigana": "すみません、でんしゃがとまっていて、よんじゅっぷんぐらいおくれます。",
+        "romaji": "Sumimasen, densha ga tomatte ite, yonjuppun gurai okuremasu.",
+        "en": "I'm sorry, the train has stopped, so I'll be about 40 minutes late.",
+        "vi": "Xin lỗi, tàu đang bị dừng nên tôi sẽ đến muộn khoảng 40 phút."
       },
       {
         "ja": "9時10分ごろ着くと思います。",
@@ -46,7 +46,7 @@ export const SCENES = [
     ],
     "hints": [
       "まず、あなたの なまえを いいましょう。「〇〇です。」",
-      "どうして おくれますか。「でんしゃが おくれて います」「ねぼうしました」などと いいましょう。",
+      "どうして おくれますか。「でんしゃが とまって います」と いいましょう。",
       "なんじに つきますか。「〇じ〇ふんごろ つきます」と いいましょう。さいごに「すみません」も いいましょう。"
     ],
     "common_errors": [
@@ -346,7 +346,7 @@ export const SCENES = [
     "title_furigana": "かいご：りようしゃさんのようすをりーだーにほうこくする",
     "title": {
       "en": "Caregiving: Reporting a resident's condition to the team leader",
-      "vi": "Điều dưỡng: Báo cáo tình trạng của người được chăm sóc cho trưởng nhóm"
+      "vi": "Chăm sóc (Kaigo): Báo cáo tình trạng của người được chăm sóc cho trưởng nhóm"
     },
     "level": "N3",
     "goal_ja": "利用者さんがいつもと違うと気づいたとき、リーダーに事実（だれが・何が・数字）を正しく報告できる。",

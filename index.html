@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>しごとの日本語れんしゅう（試作）</title>
-<link rel="stylesheet" href="style.css?v=202610091403">
+<link rel="stylesheet" href="style.css?v=202610091412">
 </head>
 <body>
 <script>
@@ -16,19 +16,19 @@
     location.replace(location.pathname + (location.search ? location.search + "&" : "?") + "openExternalBrowser=1" + location.hash);
     return;
   }
-  if (/FBAN|FBAV|Instagram|\bLine\//i.test(ua)) {
+  if (/FBAN|FBAV|FB_IAB|Instagram|\bLine\/|Zalo|BytedanceWebview|musical_ly|TikTok|MicroMessenger|KAKAOTALK/i.test(ua)) {
     document.addEventListener("DOMContentLoaded", function () {
       var d = document.createElement("div");
       d.className = "inapp";
       d.innerHTML = "⚠ この画面は アプリの中の ブラウザです。Safari か Chrome で 開いて ください。<br><small>Please open this page in Safari or Chrome. / Hãy mở trang này bằng Safari hoặc Chrome.</small>" +
         '<br><button id="copyurl">URLを コピー / Copy URL</button>';
       document.body.prepend(d);
-      document.getElementById("copyurl").onclick = function () { navigator.clipboard && navigator.clipboard.writeText(location.origin + location.pathname); this.textContent = "✓"; };
+      document.getElementById("copyurl").onclick = function () { var u = location.origin + location.pathname, b = this; if (navigator.clipboard) navigator.clipboard.writeText(u).then(function () { b.textContent = "✓"; }, function () { prompt("URL", u); }); else prompt("URL", u); };
     });
   }
 })();
 </script>
 <main id="app"></main>
-<script type="module" src="app.js?v=202610091403"></script>
+<script type="module" src="app.js?v=202610091412"></script>
 </body>
 </html>

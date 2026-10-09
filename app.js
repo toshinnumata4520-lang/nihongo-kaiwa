@@ -1,13 +1,13 @@
-import { t, tja, getLang, setLang } from "./i18n.js?v=202610091403";
-import { SCENES } from "./scenes.js?v=202610091403";
-import { SITUATIONS } from "./situations.js?v=202610091403";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610091403";
-import { startConversation, stopConversation, sendNote, liveSpeak, LIVE_MODEL } from "./live.js?v=202610091403";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js?v=202610091403";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610091403";
-import { EXAMS } from "./exams.js?v=202610091403";
-import * as S from "./store.js?v=202610091403";
-import { autoSetup, preloadGis } from "./setup.js?v=202610091403";
+import { t, tja, getLang, setLang } from "./i18n.js?v=202610091412";
+import { SCENES } from "./scenes.js?v=202610091412";
+import { SITUATIONS } from "./situations.js?v=202610091412";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610091412";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610091412";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js?v=202610091412";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610091412";
+import { EXAMS } from "./exams.js?v=202610091412";
+import * as S from "./store.js?v=202610091412";
+import { autoSetup, preloadGis } from "./setup.js?v=202610091412";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -24,75 +24,114 @@ const sceneTitle = sc => L() === "ja" ? sc.title_ja : sc.title?.[L()] || sc.titl
 const sceneGoal = sc => L() === "ja" ? sc.goal_ja : sc.goal?.[L()] || sc.goal_ja;
 
 // 画面を切り替えるたびに、前の画面の音・マイク・AIとの接続をすべて止める
-// （「画面を変えても音声が流れ続ける」への対応）。screenGen は、作りかけの声が後から別の画面で鳴るのを防ぐ番号
-let screenGen = 0;
+// （「画面を変えても音声が流れ続ける」への対応）。playToken は、作りかけの声が後から別の画面で鳴るのを防ぐ番号
+let playToken = 0;
 const playingSources = new Set();
 let currentRec = null;
 let activeTalkFinish = null;
-function stopAllAudio() {
+let voiceAbort = new AbortController();   // 作りかけの声（liveSpeak）を、画面の切り替えで止める
+try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}   // iPhoneの消音スイッチがオンでも鳴らす（iOS 17以降）
+// 音を鳴らす AudioContext は1つだけにする（iPhoneは同時に作れる数に上限がある）
+let audioCtx = null;
+const getCtx = () => (audioCtx ||= new (window.AudioContext || window.webkitAudioContext)());
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+// 流れている音だけを止める（マイクの聞き取りは止めない）
+function stopPlayback() {
   for (const s of playingSources) try { s.stop(); } catch {}
   playingSources.clear();
-  try { window.speechSynthesis?.cancel(); } catch {}
+  // iPhoneは cancel のすぐあとの speak が鳴らないことがあるので、読み上げ中のときだけ止める
+  try { if (window.speechSynthesis && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel(); } catch {}
+}
+function stopAllAudio() {
+  stopPlayback();
+  voiceAbort.abort(); voiceAbort = new AbortController();
   try { currentRec?.abort(); } catch {}
   currentRec = null;
 }
-function playBuffer(ctx, buf, gen) {
-  if (gen !== screenGen) return;   // 声ができる前に画面が変わっていたら鳴らさない
+function playBuffer(buf, token) {
+  if (token !== playToken) return;   // 声ができる前に画面が変わった・別の声を頼まれたら鳴らさない
+  stopPlayback();
+  const ctx = getCtx();
   const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
   playingSources.add(src); src.onended = () => playingSources.delete(src);
   src.start();
+  muteFor(buf.duration * 1000 + 400);   // 会話中なら、この声をマイクが拾わないようにする
 }
+// 作った声は使い回す。作っている途中の声も使い回す（連打しても接続を何本も開かない）
+const voiceCache = new Map();
+async function toBuffer(a) {
+  const ctx = getCtx();
+  if (a.isWav) return ctx.decodeAudioData(a.bytes.buffer.slice(0));
+  const n = a.bytes.length >> 1, buf = ctx.createBuffer(1, n, a.rate);
+  const ch = buf.getChannelData(0), dv = new DataView(a.bytes.buffer);
+  for (let i = 0; i < n; i++) ch[i] = dv.getInt16(i * 2, true) / 0x8000;
+  return buf;
+}
+function getVoice(ck, make) {
+  if (!voiceCache.has(ck)) {
+    const p = make(voiceAbort.signal).then(toBuffer);
+    p.catch(() => voiceCache.delete(ck));
+    voiceCache.set(ck, p);
+  }
+  return voiceCache.get(ck);
+}
+// AIの声が作れなかったら、1分間はスマホの読み上げを「ボタンを押したその場で」使う（一時的な電波の悪さで、ずっと使えなくならないように）
+// （iPhoneは、押した直後でないと読み上げが鳴らないため、待ってから代わりに鳴らすことはできない）
+let ttsFailAt = 0;
+const ttsOk = () => Date.now() - ttsFailAt > 60000;
+const isAbort = e => e?.name === "AbortError";
+
 function show(html) {
-  screenGen++;
+  playToken++;
   stopAllAudio();
   if (activeTalkFinish) { const f = activeTalkFinish; activeTalkFinish = null; f(true); }   // 会話中に画面が変わったら会話を閉じる
   $app.innerHTML = html; window.scrollTo(0, 0);
-  $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
+  wireSay($app);
 }
+const wireSay = root => root.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
 // アプリを閉じた・別のアプリに切り替えたときも止める
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "hidden") return;
+  playToken++;
   stopAllAudio();
   if (activeTalkFinish) { const f = activeTalkFinish; activeTalkFinish = null; f(); }
 });
 
-// お手本の声。キーがあればAIの自然な声（一度作った声は使い回す）、なければスマホの読み上げ
-const sayCache = new Map();
-let sayCtx = null;
-async function say(text) {
+// お手本の声。キーがあればAIの自然な声、なければスマホの読み上げ。reading は全文ひらがなの読み方
+async function say(text, reading = "") {
+  const kana = reading && !/[(（]/.test(reading) ? reading : "";
   // 短い言葉（用語カードなど）は、AIの声だと発音が崩れたり説明をしゃべったりするので、スマホの読み上げで読む
-  if (text.replace(/[。、！？\s]/g, "").length <= 10) { sayLocal(text); return; }
-  if (S.getKey() && !ttsBroken) {
-    const gen = screenGen;
-    stopAllAudio();
+  if (text.replace(/[。、！？\s]/g, "").length <= 10) { sayLocal(kana || text); return; }
+  if (S.getKey() && ttsOk()) {
+    const my = ++playToken;
+    stopPlayback();
     try {
-      sayCtx ||= new (window.AudioContext || window.webkitAudioContext)();
-      await sayCtx.resume();
-      if (!sayCache.has(text)) {
-        const a = await liveSpeak(S.getKey(), text, { style: "日本語の先生が、はっきり自然に" });
-        let buf;
-        if (a.isWav) buf = await sayCtx.decodeAudioData(a.bytes.buffer.slice(0));
-        else {
-          const n = a.bytes.length >> 1; buf = sayCtx.createBuffer(1, n, a.rate);
-          const ch = buf.getChannelData(0), dv = new DataView(a.bytes.buffer);
-          for (let i = 0; i < n; i++) ch[i] = dv.getInt16(i * 2, true) / 0x8000;
-        }
-        sayCache.set(text, buf);
-      }
-      playBuffer(sayCtx, sayCache.get(text), gen);
+      await getCtx().resume();
+      const buf = await getVoice("say:" + text, signal => liveSpeak(S.getKey(), text, { style: "日本語の先生が、はっきり自然に", reading, signal }));
+      playBuffer(buf, my);
       return;
-    } catch (e) { console.warn("TTS fallback", e); ttsBroken = true; return; }   // 次に押したときからスマホの読み上げ
+    } catch (e) {
+      if (isAbort(e)) return;
+      console.warn("TTS fallback", e); ttsFailAt = Date.now();
+      if (my === playToken && !isIOS) sayLocal(kana || text);   // Androidなどは、その場でスマホの読み上げに切り替える
+      return;
+    }
   }
-  sayLocal(text);
+  sayLocal(kana || text);
 }
-function sayLocal(text) {
+function sayLocal(text, rate = 0.85) {
   if (!window.speechSynthesis) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; u.rate = 0.85;
-  const v = speechSynthesis.getVoices().find(v => v.lang === "ja-JP"); if (v) u.voice = v;
+  stopPlayback();
+  const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; u.rate = rate;
+  const v = jaVoice(); if (v) u.voice = v;
+  muteFor(text.length * 250 / rate + 800);
   speechSynthesis.speak(u);
 }
-const sayBtn = text => `<button class="say" data-say="${esc(text)}" aria-label="listen">🔊</button>`;
+// 日本語の声は、一覧があとから読み込まれる端末（Android）があるので、毎回さがす
+const jaVoice = () => { try { return speechSynthesis.getVoices().find(v => /^ja[-_]JP/i.test(v.lang)) || null; } catch { return null; } };
+const sayBtn = (text, reading = "") => `<button class="say" data-say="${esc(text)}" data-reading="${esc(reading)}" aria-label="${esc(t("listen"))}">🔊</button>`;
+
+const fmtAt = at => { const d = new Date(at); return `${S.localDate(d).slice(5)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 
 // ───── 初回設定 ─────
 function renderSetup() {
@@ -132,7 +171,7 @@ const INDUSTRY = {
   "工場": { icon: "🏭", furi: "こうじょう", en: "Factory", vi: "Nhà máy" },
   "建設": { icon: "🏗️", furi: "けんせつ", en: "Construction", vi: "Xây dựng" },
   "介護": { icon: "🧓", furi: "かいご", en: "Care work", vi: "Chăm sóc (Kaigo)" },
-  "旅館・ホテル": { icon: "🏨", furi: "りょかん・ほてる", en: "Hotel / Ryokan", vi: "Khách sạn / Ryokan" },
+  "旅館・ホテル": { icon: "🏨", furi: "りょかん", en: "Hotel / Ryokan", vi: "Khách sạn / Ryokan" },
   "飲食": { icon: "🍽️", furi: "いんしょく", en: "Restaurant", vi: "Nhà hàng" },
 };
 function industryLabel(i) {
@@ -228,12 +267,18 @@ const setLevel = (sc, n) => localStorage.setItem("nk.level." + sc.id, n);
 
 // 手助けの材料はAIで作り、場面ごと・言語ごとに端末へ保存して使い回す（毎回作ると原価がかかるため）
 const scafPending = {};
+const SCAF_VER = 2;   // 状況カード（situations.js）や場面を変えたら上げる。古い材料を使い続けないように
+const scafValid = c => !!c?.steps?.length && c.steps.every(x => x.full && x.skeleton && Array.isArray(x.wrong) && Array.isArray(x.keywords));
 function loadScaffold(sc) {
-  const ck = `nk.scaf.${sc.id}.${L()}`;
-  try { const c = JSON.parse(localStorage.getItem(ck)); if (c?.steps?.length) return Promise.resolve(c); } catch {}
+  const ck = `nk.scaf.${SCAF_VER}.${sc.id}.${L()}`;
+  try { const c = JSON.parse(localStorage.getItem(ck)); if (scafValid(c)) return Promise.resolve(c); } catch {}
   if (!S.getKey() || !SITUATIONS[sc.id]) return Promise.resolve(null);
   return scafPending[ck] ||= makeScaffold(S.getKey(), sc, SITUATIONS[sc.id], L())
-    .then(r => { localStorage.setItem(ck, JSON.stringify(r.result)); return r.result; })
+    .then(r => {
+      if (!scafValid(r.result)) throw new Error("bad scaffold");
+      try { localStorage.setItem(ck, JSON.stringify(r.result)); } catch {}
+      return r.result;
+    })
     .catch(e => { console.error(e); delete scafPending[ck]; return null; });
 }
 
@@ -248,7 +293,7 @@ function supportHtml(scaf, level) {
     const body = level === 3 ? `<span class="jp">${esc(st.skeleton)}</span>`
       : `<span class="kw">${st.keywords.map(k => `<span class="chip">${esc(k)}</span>`).join("")}</span>`;
     return `<li>${body}<details><summary class="note">${esc(t("showAnswer"))}</summary>
-      <span class="jp">${sayBtn(st.furigana || st.full)}${esc(st.full)}</span>${S.getFurigana() ? `<span class="furi">${esc(st.furigana)}</span>` : ""}<span class="tr">${esc(st.meaning)}</span></details></li>`;
+      <span class="jp">${sayBtn(st.full, st.furigana)}${esc(st.full)}</span>${S.getFurigana() ? `<span class="furi">${esc(st.furigana)}</span>` : ""}<span class="tr">${esc(st.meaning)}</span></details></li>`;
   }).join("")}</ol></section>`;
 }
 
@@ -260,7 +305,7 @@ function wireSupport(scaf) {
     const r = document.getElementById("optres" + i);
     r.innerHTML = `${b.dataset.ok === "1" ? "✅" : "🔁"} ${S.getFurigana() ? `<span class="furi">${esc(st.furigana)}</span>` : ""}<span class="tr">${esc(st.meaning)}</span>`;
   });
-  $app.querySelectorAll(".support [data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
+  $app.querySelectorAll(".support [data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
 }
 
 function renderPrep(sc) {
@@ -299,7 +344,7 @@ function systemFor(sc, level) {
     2: "学習者は画面の3つの候補から文を選んで言う、いちばんやさしい段階。とてもゆっくり、短く話し、「やること」の順番どおりに会話を進める。予想外の質問はしない。",
     3: "学習者は画面の穴うめの文を見ながら話す段階。ゆっくり話し、「やること」の順番どおりに進める。",
     4: "学習者はキーワードだけを見て自分で文を作る段階。ふつうより少しゆっくり話す。言い方を少し変えたり、質問を1つ足したりしてよい。",
-    5: "学習者は状況カードだけで話すいちばん上の段階。ふつうの速さで話す。途中で、状況に合った予想外のこと（例：「今、手が離せない」「その時間だと困る」）を1つだけ混ぜる。",
+    5: "学習者は状況カードだけで話すいちばん上の段階。ふつうの速さで話す。途中で、状況と矛盾しない予想外のこと（例：「今、手が離せない」「その時間だと困る」）を1つだけ混ぜてよい。",
   }[level] || "";
   const s = SITUATIONS[sc.id];
   const langName = { ja: "やさしい日本語", en: "英語", vi: "ベトナム語" }[L()] || "英語";
@@ -308,11 +353,11 @@ function systemFor(sc, level) {
 # 練習の内容
 これは外国人の日本語学習者（目安 ${sc.level}）との、職場・生活の会話練習（ロールプレイ）です。
 あなたの役: ${sc.ai_role}
-学習者の練習用の名前: ${nick}（本名ではない）
+学習者の練習用の名前: ${mask(nick)}（本名ではない）
 今日の目標: ${sc.goal_ja}
 ${s ? `学習者に見せている状況: ${s.you.ja} ${s.now.ja}
 学習者がやること（順番の目安）: ${s.todo.map((x, i) => `${i + 1}. ${x.ja}`).join(" / ")}
-この状況の設定（人名・時間・数字）に合わせて会話する。学習者に見せていない設定を勝手に増やさない。` : ""}
+この状況の設定（人名・時間・数字）に合わせて会話する。学習者に見せていない設定を勝手に増やさない（例外は「今回の手助けの段階」で認めたものだけ）。` : ""}
 この場面の注意: ${sc.safety_note}
 
 # 場面から外れたとき（先生として短く指摘する）
@@ -323,6 +368,8 @@ ${s ? `学習者に見せている状況: ${s.you.ja} ${s.now.ja}
 - はっきりした日本語の間違いは、聞き流さずに、その発言のすぐあとで直す。例：「あるです」「あるですます」「行くです」「食べるでした」（動詞に「です」を付ける）、動詞・形容詞の形の間違い（「痛いがあります」「止めるました」）、助詞の大きな間違い、上司やお客様へのていねいさの間違い（「わかった」「ちょっと待って」）。
 - 直し方：役をいったん止めて「（せんせい）『〇〇』ですね。もう一度 言ってみましょう。」と、正しい言い方を1つだけ短く言う。学習者が言い直したら「いいですね。」と言って、すぐ役に戻る。
 - 1回の発言で直すのは1つだけ。いちばん大事な間違いを選ぶ。言い直しがうまくいかなくても、2回目で役に戻る（責めない）。
+- 先生として口をはさむのは、1回の発言につき1回だけ。場面から外れた指摘と日本語の直しが両方あてはまるときは、場面の指摘だけをする。
+- 小さな間違い（意味は通じる助詞のゆれ、少しくだけた言い方）は、手助けの段階が2・3のときは直さず、役のまま会話を続ける。
 - 文字起こしの誤認識らしいもの（意味は通じる言いよどみ・言い直し）は直さない。
 
 # 読み方（発音をまちがえない）
@@ -335,11 +382,11 @@ ${sc.key_phrases.map(p => `  ${p.ja} → ${p.furigana}`).join("\n")}
 ${levelRule}
 
 # 話し方
-- 日本語だけで話す。学習者に合わせて、短い文で、少しゆっくり話す。1回に1つだけ質問する。
+- 日本語だけで話す（例外：伝わらないときの一言の説明だけは${langName}。安全ルールの「英語で一言」も${langName}に読みかえる）。学習者に合わせて、短い文で、少しゆっくり話す。1回に1つだけ質問する。
 - 意味が分からないときは、役のまま自然に聞き返す。
 - 目標が達成されたら、役として自然に会話を終える。
 - 最初の一言は「${sc.opening_line}」。
-- 丸かっこ（ ）の中の文は、学習者が画面のボタンを押した合図。声に出して読まず、その指示に従う。`;
+- 丸かっこ（ ）の中の文は、学習者が画面のボタンを押した合図。声に出して読まず、返事もせず、黙ってその指示に従う。`;
 }
 
 function renderTalk(sc) {
@@ -355,29 +402,45 @@ function renderTalk(sc) {
       <div id="turn" class="turn wait"><span class="icon">⏳</span>${esc(t("connecting"))}</div>
       <p id="status" class="status note">${esc(t("connecting"))}</p>
       <div class="meter"><div id="level"></div></div>
-      <details class="sitbox" open><summary>${esc(t("situation"))}${level < 5 ? "・" + esc(t("todo")) : ""}</summary>${situationHtml(sc, true, level >= 5)}</details>
-      <div id="support"></div>
       <div id="log" class="log"></div>
+      <div id="support"></div>
+      <details class="sitbox" open><summary>${esc(t("situation"))}${level < 5 ? "・" + esc(t("todo")) : ""}</summary>${situationHtml(sc, true, level >= 5)}</details>
       <p id="hintText" class="hinttext" hidden></p>
       <div class="row">
         <button id="hint" class="sub">💡 ${esc(t("hint"))}</button>
         <button id="slow" class="sub">🐢 ${esc(t("slower"))}</button>
       </div>
       <form id="typeForm" class="row"><input id="typeBox" placeholder="${esc(t("typeHere"))}"><button class="sub">${esc(t("send"))}</button></form>
-      <button id="end" class="primary">${bi("end")}</button>
+      <div id="endrow"><button id="end" class="primary">${bi("end")}</button></div>
     </div>`);
   const $log = document.getElementById("log"), $status = document.getElementById("status");
+  // 話す人ごとに「いま書き足している発言」を持つ（学習者とAIの文字起こしが交互に届いても、発言が細切れにならないように）
+  const open = { me: null, ai: null };
   const add = (who, text) => {
-    const last = transcript[transcript.length - 1];
-    if (last && last.who === who && !last.done) last.text += text; else transcript.push({ who, text, done: false });
+    if (!open[who]) { open[who] = { who, text: "" }; transcript.push(open[who]); }
+    open[who].text += text;
     $log.innerHTML = transcript.filter(m => m.text.trim()).map(m =>
-      `<p class="msg ${m.who}">${esc(m.who === "me" ? mask(m.text) : m.text)}</p>`).join("");
+      `<p class="msg ${m.who}">${esc(mask(m.text))}</p>`).join("");
     $log.scrollTop = $log.scrollHeight;
   };
-  const statusText = { listening: "connected", "mic-denied": "micDenied", "time-up": "timeUp", closed: "error" };
+  const setStatus = (text, isErr) => { $status.textContent = text; $status.classList.toggle("err", !!isErr); };
+  // 会話を続けられないとき：結果画面には進まず、理由と「もう一度」「ホーム」を出す
+  const stuck = (msgKey, detail) => {
+    finished = true; activeTalkFinish = null; clearInterval(timer);
+    stopConversation();
+    console.warn("talk stopped", msgKey, detail);
+    // 学習者には英語の生エラーを見せない。キーの誤りだけは分かるように言いかえる
+    setStatus(/API key/i.test(detail || "") ? t("keyInvalid") : t(msgKey), true);
+    const $t = document.getElementById("turn"); if ($t) { $t.className = "turn wait"; $t.innerHTML = `<span class="icon">⚠️</span>${esc(t(msgKey))}`; }
+    document.getElementById("endrow").innerHTML = `<div class="row"><button id="again" class="primary">🔁 ${esc(t("reconnect"))}</button><button id="home" class="sub">${esc(t("home"))}</button></div>`;
+    document.getElementById("again").onclick = () => renderTalk(sc);
+    document.getElementById("home").onclick = renderHome;
+  };
+  const $support = document.getElementById("support");
   loadScaffold(sc).then(scaf => {
-    const $s = document.getElementById("support");
-    if ($s && scaf) { $s.innerHTML = supportHtml(scaf, level); wireSupport(scaf); }
+    if (!$support.isConnected) return;   // 材料ができる前に、別の画面に移っていたら何もしない
+    if (scaf) { $support.innerHTML = supportHtml(scaf, level); wireSupport(scaf); }
+    else if (level < 5) $support.innerHTML = `<p class="note">${esc(t("scafFailed"))}</p>`;
   });
 
   activeTalkFinish = finish;
@@ -385,20 +448,27 @@ function renderTalk(sc) {
     key, systemText: systemFor(sc, level),
     openingText: "（練習を始めます。あなたの最初の一言から話してください）",
     onText: (who, text, done) => {
+      if (finished) return;
       if (text) add(who, text);
-      if (done) { for (const m of transcript) m.done = true; }
-      // 学習者が話し始めたら、直前のAIの発言は区切る
-      if (who === "me") { const prev = transcript[transcript.length - 2]; if (prev) prev.done = true; }
+      if (done) { open.me = null; open.ai = null; }   // AIの発言が終わったら、どちらの発言も区切る
     },
     onStatus: (s, isErr, detail) => {
-      $status.textContent = t(statusText[s] || s) + (detail ? ` (${detail})` : ""); $status.classList.toggle("err", !!isErr);
-      if (s === "listening" && !timer) startTimer();           // 5分は、つながって話せる状態になってから数える
-      if (s === "mic-denied") { finished = true; clearInterval(timer); }
+      if (finished) return;
+      if (s === "listening") { setStatus(t("connected")); if (!timer) startTimer(); return; }   // 5分は、つながって話せる状態になってから数える
+      if (s === "mic-denied") { stuck("micDenied", detail); return; }
+      if (s === "time-up") { setStatus(t("timeUp")); return; }
+      if (s === "closed" && isErr) setStatus(t("connLost") + (detail ? ` (${detail})` : ""), true);
     },
     onUsage: u => usage.push(u),
-    onClose: () => finish(),
+    // 接続が切れた：まだ何も話していなければ結果画面に進まず、つなぎ直せるようにする
+    onClose: err => {
+      if (finished) return;
+      if (err && !transcript.some(m => m.who === "me" && m.text.trim())) stuck("connLost", err);
+      else finish();
+    },
     // 今だれが話す番かを、大きく色分けして出す（「話していいのか分からない」への対応）
     onTurn: s => {
+      if (finished) return;
       const $t = document.getElementById("turn"); if (!$t) return;
       $t.className = "turn " + s;
       const icon = { wait: "⏳", ai: "🔊", you: "🎙️", hearing: "👂" }[s];
@@ -406,12 +476,14 @@ function renderTalk(sc) {
       if (s === "you") try { navigator.vibrate?.(120); } catch {}   // Androidは短く震えて知らせる
     },
     onLevel: v => { const $l = document.getElementById("level"); if ($l) $l.style.width = Math.round(v * 100) + "%"; },
-  });
+  }).catch(e => { if (!finished) stuck("startFailed", e?.name || String(e).slice(0, 60)); });
 
-  let left = MAX_SECONDS;
+  // 時間は「終わる時刻」から数える（1秒ごとに数を減らすと、タイマーが間引かれたときに5分を超えてしまう）
+  let endAt = 0;
   function startTimer() {
+    endAt = Date.now() + MAX_SECONDS * 1000;
     timer = setInterval(() => {
-      left--;
+      const left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
       const $c = document.getElementById("clock");
       if ($c) $c.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
       if (left <= 0) finish();
@@ -425,10 +497,12 @@ function renderTalk(sc) {
   document.getElementById("slow").onclick = () => sendNote("（学習者が「ゆっくり」を押しました。これからは、もっとゆっくり、短い文で話してください）");
   document.getElementById("typeForm").onsubmit = e => {
     e.preventDefault();
-    const box = document.getElementById("typeBox"), v = box.value.trim();
+    const box = document.getElementById("typeBox");
+    const v = mask(box.value.replace(/[（）()]/g, "").trim());   // かっこはボタンの合図と区別できなくなるので取る
     if (!v) return;
-    add("me", v); transcript[transcript.length - 1].done = true;
-    sendNote(v); box.value = "";
+    if (!sendNote(v)) { setStatus(t("connecting")); return; }   // つながっていないときは、送ったことにしない
+    open.me = null; add("me", v); open.me = null;
+    box.value = "";
   };
   document.getElementById("end").onclick = () => finish();
 
@@ -439,13 +513,13 @@ function renderTalk(sc) {
     clearInterval(timer);
     const seconds = stopConversation();
     if (leaving) return;
-    const clean = transcript.filter(m => m.text.trim()).map(m => ({ who: m.who, text: m.who === "me" ? mask(m.text) : m.text }));
+    const clean = transcript.filter(m => m.text.trim()).map(m => ({ who: m.who, text: mask(m.text) }));
     renderFeedback(sc, clean, seconds, usage);
   }
 }
 
 // ───── 直し ─────
-async function renderFeedback(sc, transcript, seconds, liveUsage) {
+async function renderFeedback(sc, transcript, seconds, liveUsage, isRetry = false) {
   show(`<p class="status">${esc(t("checking"))}</p>`);
   let fb = null, textUsage = {}, failed = false;
   const spoke = transcript.some(m => m.who === "me");
@@ -455,12 +529,16 @@ async function renderFeedback(sc, transcript, seconds, liveUsage) {
       fb = r.result; textUsage = r.usage;
     }
   } catch (e) { console.error(e); failed = true; }
-  S.addSession({ scene: sc.id, level: getLevel(sc), at: new Date().toISOString(), seconds: Math.round(seconds), transcript, feedback: fb,
+  if (fb && !fb.fix?.better) { fb = null; failed = true; }   // 返事が欠けているときは失敗として扱う
+  if (!isRetry || fb) S.addSession({ scene: sc.id, level: getLevel(sc), at: new Date().toISOString(), seconds: Math.round(seconds), transcript, feedback: fb,
     usage: { live: liveUsage, text: textUsage }, models: { live: LIVE_MODEL, text: TEXT_MODEL } });
 
   if (!fb) {
-    show(`<p>${esc(t(failed ? "error" : "noSpeech"))}</p><button class="primary" id="home">${esc(t("home"))}</button>`);
+    show(`<p>${esc(t(failed ? "error" : "noSpeech"))}</p>
+      ${failed ? `<button class="primary" id="again">🔁 ${esc(t("checkAgain"))}</button>` : `<button class="primary" id="again">🔁 ${esc(t("tryAgain"))}</button>`}
+      <button class="link" id="home">${esc(t("home"))}</button>`);
     document.getElementById("home").onclick = renderHome;
+    document.getElementById("again").onclick = () => failed ? renderFeedback(sc, transcript, seconds, liveUsage, true) : renderTalk(sc);
     return;
   }
   const f = fb.fix;
@@ -476,7 +554,7 @@ async function renderFeedback(sc, transcript, seconds, liveUsage) {
     <section class="card">
       <h2>${bi("oneFix")}</h2>
       ${f.said ? `<p class="said">${esc(t("youSaid"))}：${esc(f.said)}</p>` : ""}
-      <p class="better">${sayBtn(f.better_furigana || f.better)}${esc(t("better"))}：<b>${esc(f.better)}</b></p>
+      <p class="better">${sayBtn(f.better, f.better_furigana)}${esc(t("better"))}：<b>${esc(f.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(f.better_furigana)}</p>` : ""}
       <p class="why">${esc(why)}</p>
       ${L() !== "ja" ? `<p class="ja">${esc(f.why_ja)}</p>` : ""}
@@ -485,7 +563,7 @@ async function renderFeedback(sc, transcript, seconds, liveUsage) {
       <h2>${bi("correctJa")}</h2>
       <ol class="model">${fb.model_lines.map(m => `<li>
         ${m.said ? `<span class="said">${esc(t("youSaid"))}：${esc(m.said)}</span>` : `<span class="said">${esc(t("missing"))}</span>`}
-        <span class="jp">${sayBtn(m.furigana || m.correct)}${esc(m.correct)}</span>
+        <span class="jp">${sayBtn(m.correct, m.furigana)}${esc(m.correct)}</span>
         ${S.getFurigana() ? `<span class="furi">${esc(m.furigana)}</span>` : ""}
       </li>`).join("")}</ol>
     </section>` : ""}
@@ -498,15 +576,16 @@ async function renderFeedback(sc, transcript, seconds, liveUsage) {
 // ───── 言い直し（ブラウザの音声認識。使えない端末では文字で入力） ─────
 // 「話す」ボタン：押すと赤く点滅して「聞いています」に変わり、聞き取れた文字をその場で見せる。
 // 話し終わったら「おわり」（黙っていても自動で終わる）。聞き取れているかが目で分かるようにする
-function listenOnce() {
+function listenOnce($btn) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return Promise.resolve(null);
-  const $btn = document.getElementById("mic");
+  stopPlayback();   // 指示の声を流したまま聞き取ると、その声を学習者の発言として拾ってしまう
+  try { currentRec?.abort(); } catch {}   // 前の聞き取りが残っていたら止める（同時に1つしか動かせない）
   const label = $btn?.innerHTML;
   return new Promise(resolve => {
     const r = new SR(); r.lang = "ja-JP"; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
     currentRec = r;   // 画面が変わったら止められるように
-    let got = "", finished = false;
+    let got = "", err = null, finished = false;
     const box = document.createElement("div");
     box.className = "livecap";
     box.innerHTML = `<span class="placeholder">${esc(t("speakNow"))}</span>`;
@@ -516,11 +595,14 @@ function listenOnce() {
       $btn.innerHTML = `🔴 ${bi("recording")}`;
       $btn.onclick = () => r.stop();   // 「おわり」
     }
+    const guard = setTimeout(() => { try { r.stop(); } catch {} setTimeout(end, 1500); }, 15000);   // 終わりの合図が来ない端末の保険
     const end = () => {
       if (finished) return; finished = true;
+      clearTimeout(guard);
+      if (currentRec === r) currentRec = null;
       if ($btn) { $btn.classList.remove("recording"); $btn.innerHTML = label; }
       box.remove();
-      resolve(got);
+      resolve({ text: got, err });
     };
     r.onresult = e => {
       let txt = "";
@@ -528,7 +610,7 @@ function listenOnce() {
       got = txt;
       box.textContent = txt || "…";
     };
-    r.onerror = end;
+    r.onerror = e => { err = e.error; end(); };
     r.onend = end;
     try { r.start(); } catch { end(); }
   });
@@ -536,11 +618,18 @@ function listenOnce() {
 // listenOnce は「おわり」でも使うので、ボタンの元の動きは呼び出し側で付け直す
 function wireMic(onSaid, $res) {
   const $btn = document.getElementById("mic");
+  if (!$btn) return;
   $btn.onclick = async () => {
-    const said = await listenOnce();
+    const r = await listenOnce($btn);
+    if (!$btn.isConnected) return;   // 聞き取りの間に画面が変わっていたら何もしない
     wireMic(onSaid, $res);
-    if (said === null) { $res.innerHTML = `<p class="status">${esc(t("noSR"))}</p>`; document.getElementById("typeBox").focus(); return; }
-    onSaid(said);
+    const focusType = () => document.getElementById("typeBox")?.focus();
+    if (r === null) { $res.innerHTML = `<p class="status">${esc(t("noSR"))}</p>`; focusType(); return; }
+    if (r.err === "not-allowed" || r.err === "service-not-allowed" || r.err === "audio-capture") {
+      $res.innerHTML = `<p class="status err">${esc(t("micDenied"))}</p>`; focusType(); return;
+    }
+    if (r.err === "network" && !r.text) { $res.innerHTML = `<p class="status err">${esc(t("srNetwork"))}</p>`; focusType(); return; }
+    onSaid(r.text);
   };
 }
 
@@ -548,9 +637,9 @@ function renderRetry(sc, fix, fromReview = null) {
   show(`
     <button class="back link">← ${esc(t("home"))}</button>
     <h1>${bi("retry")}</h1>
-    <p>${bi("retryPrompt")}</p>
-    <section class="card">
-      <p class="big">${sayBtn(fix.better_furigana || fix.better)}<b>${esc(fix.better)}</b></p>
+    <p>${bi(fromReview ? "reviewPrompt" : "retryPrompt")}</p>
+    <section class="card" id="target"${fromReview ? " hidden" : ""}>
+      <p class="big">${sayBtn(fix.better, fix.better_furigana)}<b>${esc(fix.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(fix.better_furigana)}</p>` : ""}
       ${fix.better_meaning ? `<p class="tr">${esc(fix.better_meaning)}</p>` : ""}
     </section>
@@ -559,20 +648,41 @@ function renderRetry(sc, fix, fromReview = null) {
     <p id="res" class="status"></p>`);
   $app.querySelector(".back").onclick = renderHome;
   const $res = document.getElementById("res");
-  let tries = 0;
+  let tries = 0, busy = false, closed = false;
+  const $target = document.getElementById("target");
+  if (fromReview) $target.insertAdjacentHTML("afterend", `<section class="card"><p class="tr big">${esc(fix.better_meaning || "")}</p></section>`);
   const judge = async said => {
+    if (busy || closed) return;
     if (!said) { $res.textContent = t("notHeard"); return; }
+    said = mask(said);
+    $target.hidden = false;   // 答えたら、正しい文を見せる
+    if (!S.getKey()) {   // AIの判定が使えないときは、正しい文と比べて自分で〇つけ
+      closed = true;
+      $res.innerHTML = `${esc(t("youSaid"))}：${esc(said)}<br>${esc(t("selfCheck"))}<div class="row"><button id="selfok" class="sub">✅ ${esc(t("gotIt"))}</button><button id="selfng" class="sub">🔁 ${esc(t("notYet"))}</button></div>`;
+      const done = ok => { if (fromReview) { S.gradeCard(fromReview, ok); renderReview(); } else renderHome(); };
+      document.getElementById("selfok").onclick = () => done(true);
+      document.getElementById("selfng").onclick = () => done(false);
+      return;
+    }
+    busy = true;
     $res.textContent = t("checking");
     try {
       const { result } = await judgeRetry(S.getKey(), fix.better, said);
+      if (!$res.isConnected) return;
       $res.innerHTML = `${esc(said)}<br><b>${result.ok ? "✅ " + esc(t("great")) : "🔁 " + esc(t("again"))}</b> ${esc(result.comment)}`;
       tries++;
-      if (fromReview && (result.ok || tries >= 2)) { S.gradeCard(fromReview, result.ok); setTimeout(renderReview, 1500); return; }
+      if (result.ok || tries >= 2) {   // ここで終わり：もう一度押せないようにする
+        closed = true;
+        document.getElementById("mic").disabled = true;
+        document.querySelector("#typeForm button").disabled = true;
+      }
+      if (fromReview && (result.ok || tries >= 2)) { S.gradeCard(fromReview, result.ok); setTimeout(() => { if ($res.isConnected) renderReview(); }, 1500); return; }
       if (result.ok || tries >= 2) {   // 2回うまくいかなければ、くり返させずに先へ進める
         $res.insertAdjacentHTML("beforeend", `<br><button class="primary" id="done">${esc(t("home"))}</button>`);
         document.getElementById("done").onclick = renderHome;
       }
     } catch (e) { console.error(e); $res.textContent = t("error"); }
+    finally { busy = false; }
   };
   wireMic(judge, $res);
   document.getElementById("typeForm").onsubmit = e => { e.preventDefault(); judge(document.getElementById("typeBox").value.trim()); };
@@ -580,14 +690,6 @@ function renderRetry(sc, fix, fromReview = null) {
 
 // ───── 聞いて くりかえす（復唱・聞き返し） ─────
 // 指示の文字は最初は隠す（聞き取りの練習）。分からないときは聞き返すのが正解の問題もある
-function speak(text, rate) {
-  if (!window.speechSynthesis) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; u.rate = rate;
-  const v = speechSynthesis.getVoices().find(v => v.lang === "ja-JP"); if (v) u.voice = v;
-  speechSynthesis.speak(u);
-}
-
 // 指示はAIの自然な声で流す（スマホの読み上げは機械的で、現場の話し方の練習にならないため）。
 // 一度作った声は使い回す。作れないときだけスマホの読み上げにする
 const STYLE_PROMPT = {
@@ -599,45 +701,40 @@ const STYLE_PROMPT = {
   "電話": "電話の向こうのお客様が、ていねいに言う",
   "現場のことば": "建設現場の職長が、大きな声ではっきり言う",
 };
-const audioCache = new Map();
-let drillCtx = null;
-// AIの声が作れなかったら、以後はスマホの読み上げを「ボタンを押したその場で」使う
-// （iPhoneは、押した直後でないと読み上げが鳴らないため、待ってから代わりに鳴らすことはできない）
-let ttsBroken = false;
 async function playVoice(d, slow) {
-  const ck = d.id + (slow ? ":slow" : "");
-  const local = () => speak(d.say_kana || d.say, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
-  if (ttsBroken || !S.getKey()) { local(); return; }
-  const gen = screenGen;
-  stopAllAudio();   // 連打しても重ならないように
+  const local = () => sayLocal(d.say_kana || d.say, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
+  if (!S.getKey() || !ttsOk()) { local(); return; }
+  const my = ++playToken;
+  stopPlayback();   // 連打しても重ならないように
   const $st = document.getElementById("voiceStatus");
   try {
-    if (!audioCache.has(ck) && $st) $st.textContent = t("voiceLoading");
-    drillCtx ||= new (window.AudioContext || window.webkitAudioContext)();
-    await drillCtx.resume();
-    if (!audioCache.has(ck)) {
-      const style = slow ? "外国人にもわかるように、とてもゆっくり、はっきり言う" : STYLE_PROMPT[d.style];
-      const a = await liveSpeak(S.getKey(), d.say, { style, reading: d.say_kana, voice: d.voice });   // 漢字の文に読み方を添えて、会話と同じAIに読ませる
-      let buf;
-      if (a.isWav) buf = await drillCtx.decodeAudioData(a.bytes.buffer.slice(0));
-      else {
-        const n = a.bytes.length >> 1; buf = drillCtx.createBuffer(1, n, a.rate);
-        const ch = buf.getChannelData(0), dv = new DataView(a.bytes.buffer);
-        for (let i = 0; i < n; i++) ch[i] = dv.getInt16(i * 2, true) / 0x8000;
-      }
-      audioCache.set(ck, buf);
-    }
-    playBuffer(drillCtx, audioCache.get(ck), gen);
-    if ($st) $st.textContent = "";
+    if ($st) $st.textContent = t("voiceLoading");
+    await getCtx().resume();
+    const style = slow ? "外国人にもわかるように、とてもゆっくり、はっきり言う" : STYLE_PROMPT[d.style];
+    // 漢字の文に読み方を添えて、会話と同じAIに読ませる
+    const buf = await getVoice("drill:" + d.id + (slow ? ":slow" : ""),
+      signal => liveSpeak(S.getKey(), d.say, { style, reading: d.say_kana, voice: d.voice, signal }));
+    if ($st?.isConnected && my === playToken) $st.textContent = "";
+    playBuffer(buf, my);
   } catch (e) {
+    if (isAbort(e)) return;
     console.warn("TTS fallback", e);
-    ttsBroken = true;
-    if ($st) $st.textContent = t("voiceRetry") + `（${String(e.message).slice(0, 80)}）`;
+    ttsFailAt = Date.now();
+    if ($st?.isConnected) $st.textContent = t("voiceRetry");
   }
 }
 
+const kanaLine = k => S.getFurigana() && k ? `<p class="furi">${esc(k)}</p>` : "";
+
 function renderDrill(list, i) {
-  if (i >= list.length) { renderHome(); return; }
+  // 最後の問題のあとは、だまってホームに戻らず、おわりの画面を出す
+  if (i >= list.length) {
+    show(`<h1>👂 ${bi("drillTitle")}</h1><section class="card result ok"><p class="big">🎉 ${esc(t("drillDone"))}</p></section>
+      <button id="again" class="primary">🔁 ${esc(t("examAgain"))}</button><button id="home" class="link">${esc(t("home"))}</button>`);
+    document.getElementById("again").onclick = () => renderDrill(list, 0);
+    document.getElementById("home").onclick = renderHome;
+    return;
+  }
   const d = list[i];
   const log = { replays: 0, slow: 0, revealed: false };
   show(`
@@ -651,7 +748,7 @@ function renderDrill(list, i) {
         <button id="slow" class="sub">🐢 ${esc(t("listenSlow"))}</button>
       </div>
       <p id="voiceStatus" class="note"></p>
-      <details id="reveal"><summary class="note">${esc(t("showText"))}</summary><p class="big">${esc(d.say)}</p></details>
+      <details id="reveal"><summary class="note">${esc(t("showText"))}</summary><p class="big">${esc(d.say)}</p>${S.getFurigana() && d.say_kana ? `<p class="furi">${esc(d.say_kana)}</p>` : ""}</details>
       <p class="note">💡 ${esc(t("askTip"))}</p>
     </section>
     <button id="mic" class="primary big">🎙 ${esc(t("speak"))}</button>
@@ -663,23 +760,32 @@ function renderDrill(list, i) {
   document.getElementById("reveal").ontoggle = e => { if (e.target.open) log.revealed = true; };
   log.replays++; playVoice(d, false);   // 最初に1回、自動で流す
   const $res = document.getElementById("res");
-  const judge = async said => {
-    if (!said) { $res.innerHTML = `<p class="status">${esc(t("notHeard"))}</p>`; return; }
-    if (!S.getKey()) {   // AIの判定が使えないときは、お手本を見て自分で答え合わせして先へ進める
-      $res.innerHTML = `<section class="card"><p class="said">${esc(t("youSaid"))}：${esc(said)}</p>
+  let busy = false;
+  const selfCheck = (said, failed) => {
+      $res.innerHTML = (failed ? `<p class="status err">${esc(t("judgeFailed"))}</p>` : "") + `<section class="card"><p class="said">${esc(t("youSaid"))}：${esc(said)}</p>
         <p class="note">${esc(t("selfCheck"))}</p>
-        <p class="better">${sayBtn(d.model_kana || d.model)}${esc(t("modelAnswer"))}：<b>${esc(d.model)}</b></p>
-        <p class="note">${esc(t("instruction"))}：${esc(d.say)}</p></section>
+        <p class="better">${sayBtn(d.model, d.model_kana)}${esc(t("modelAnswer"))}：<b>${esc(d.model)}</b></p>${kanaLine(d.model_kana)}
+        <p class="note">${esc(t("instruction"))}：${esc(d.say)}</p>${kanaLine(d.say_kana)}</section>
         <div class="row"><button id="again" class="sub">🔁 ${esc(t("tryAgain"))}</button><button id="next" class="primary">${esc(t("next"))} →</button></div>`;
-      $res.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
+      $res.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
       document.getElementById("again").onclick = () => renderDrill(list, i);
       document.getElementById("next").onclick = () => renderDrill(list, i + 1);
       $res.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
+  };
+  const judge = async said => {
+    if (busy) return;
+    if (!said) { $res.innerHTML = `<p class="status">${esc(t("notHeard"))}</p>`; return; }
+    said = mask(said);
+    if (!S.getKey()) { selfCheck(said); return; }   // AIの判定が使えないときは、お手本を見て自分で答え合わせして先へ進める
     $res.innerHTML = `<p class="status">${esc(t("checking"))}</p>`;
+    busy = true;
     try {
       const { result: r, usage } = await judgeDrill(S.getKey(), d, said, L());
+      if (!$res.isConnected) return;
+      r.checks = Array.isArray(r.checks) ? r.checks : [];
+      // AIの ok と、項目ごとの判定が食い違わないようにそろえる
+      if (d.kind !== "ask" && r.checks.length) r.ok = r.checks.every(c => c.ok);
+      else if (d.kind === "ask" && r.checks.length) r.ok = r.ok && r.checks.some(c => c.ok);
       S.addSession({ type: "drill", drill: d.id, at: new Date().toISOString(), seconds: 0, said, ok: r.ok, checks: r.checks, ...log, usage: { text: usage } });
       $res.innerHTML = `
         <section class="card result ${r.ok ? "ok" : ""}">
@@ -688,14 +794,15 @@ function renderDrill(list, i) {
           <ul class="checks">${r.checks.map(c => `<li>${c.ok ? "✅" : "⬜"} ${esc(c.item)}</li>`).join("")}</ul>
           <p>${esc(L() === "ja" ? r.comment_ja : r.comment)}</p>
           ${L() !== "ja" ? `<p class="ja">${esc(r.comment_ja)}</p>` : ""}
-          <p class="better">${sayBtn(d.model_kana || d.model)}${esc(t("modelAnswer"))}：<b>${esc(d.model)}</b></p>
-          <p class="note">${esc(t("instruction"))}：${esc(d.say)}</p>
+          <p class="better">${sayBtn(d.model, d.model_kana)}${esc(t("modelAnswer"))}：<b>${esc(d.model)}</b></p>${kanaLine(d.model_kana)}
+          <p class="note">${esc(t("instruction"))}：${esc(d.say)}</p>${kanaLine(d.say_kana)}
         </section>
         <div class="row"><button id="again" class="sub">🔁 ${esc(t("tryAgain"))}</button><button id="next" class="primary">${esc(t("next"))} →</button></div>`;
-      $res.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
+      $res.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
       document.getElementById("again").onclick = () => renderDrill(list, i);
       document.getElementById("next").onclick = () => renderDrill(list, i + 1);
-    } catch (e) { console.error(e); $res.innerHTML = `<p class="status err">${esc(t("error"))}</p>`; }
+    } catch (e) { console.error(e); if ($res.isConnected) selfCheck(said, true); }
+    finally { busy = false; }
   };
   wireMic(judge, $res);
   document.getElementById("typeForm").onsubmit = e => { e.preventDefault(); judge(document.getElementById("typeBox").value.trim()); };
@@ -718,15 +825,15 @@ const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i-
 // 「漢字(よみ)」をふりがな付きの表示に、【語】を下線にする
 function examText(q) {
   // 用語カード：語を大きく、ふりがなは語の上に
-  if (q.term) return `${esc(t("cardQ"))}<br><span class="term">${S.getFurigana() ? `<ruby>${esc(q.term)}<rt>${esc(q.reading)}</rt></ruby>` : esc(q.term)}</span>`;
+  if (q.term) return `${esc(t("cardQ"))}<br><span class="term">${S.getFurigana() && q.reading && q.reading !== q.term ? `<ruby>${esc(q.term)}<rt>${esc(q.reading)}</rt></ruby>` : esc(q.term)}</span>`;
   // ふりがなが「全文ひらがな」の問題（一問一答）は、漢字の文の下に、ひらがなの行をそえる
-  if (S.getFurigana() && q.question_furigana && !/\([ぁ-ん]/.test(q.question_furigana) && q.question_furigana !== q.question_ja)
+  if (S.getFurigana() && q.question_furigana && !/[一-龯々]/.test(q.question_furigana) && q.question_furigana !== q.question_ja)
     return esc(q.question_ja).replace(/【(.+?)】/g, "<u>$1</u>").replace(/\n/g, "<br>") +
       `<span class="furi">${esc(q.question_furigana.split("\n").slice(1).join(" "))}</span>`;
   const raw = S.getFurigana() ? q.question_furigana : q.question_ja;
   let h = esc(raw).replace(/【(.+?)】/g, "<u>$1</u>");
   // 「｜」があれば、そこから後ろの漢字だけにふりがなを付ける（例：作業｜手順(てじゅん)）。ふりがなOFFでは「｜」を消す
-  if (S.getFurigana()) h = h.replace(/(?:｜([一-龯々〆ヶ]+)|([一-龯々〆ヶ]+))\(([ぁ-んー]+)\)/g, (_, a, b, r) => `<ruby>${a || b}<rt>${r}</rt></ruby>`);
+  if (S.getFurigana()) h = h.replace(/(?:｜([0-9０-９一-龯々〆ヶ]+)|([一-龯々〆ヶ]+))\(([ぁ-んー]+)\)/g, (_, a, b, r) => `<ruby>${a || b}<rt>${r}</rt></ruby>`);
   h = h.replace(/｜/g, "");
   return h.replace(/\n/g, "<br>");
 }
@@ -734,13 +841,18 @@ function examText(q) {
 // 聴解の台本を、話す人ごとに声の高さを変えて読み上げる
 function playScript(script) {
   if (!window.speechSynthesis) return;
-  speechSynthesis.cancel();
-  const v = speechSynthesis.getVoices().find(v => v.lang === "ja-JP");
-  for (const line of script.split("\n")) {
-    const m = line.match(/^(男|女|店員|客|アナウンス|[^：]{1,6})：(.*)$/);
-    const u = new SpeechSynthesisUtterance(m ? m[2] : line);
+  stopPlayback();
+  const v = jaVoice();
+  const lines = script.split("\n").map(line => {
+    const m = line.match(/^([^：]{1,6})：(.*)$/);
+    return { who: m?.[1] || "", text: m ? m[2] : line };
+  });
+  const others = [...new Set(lines.map(l => l.who).filter(w => w && w !== "男" && w !== "女"))];
+  const pitchOf = w => w === "男" ? 0.7 : w === "女" ? 1.3 : w ? [0.85, 1.2, 1.0, 0.75][others.indexOf(w) % 4] : 1;
+  for (const l of lines) {
+    const u = new SpeechSynthesisUtterance(l.text);
     u.lang = "ja-JP"; u.rate = 0.95; if (v) u.voice = v;
-    u.pitch = m?.[1] === "男" ? 0.7 : m?.[1] === "女" ? 1.3 : 1;
+    u.pitch = pitchOf(l.who);
     speechSynthesis.speak(u);
   }
 }
@@ -758,7 +870,8 @@ function startExam(set) {
 function renderExamQ(set, qs, i, results) {
   if (i >= qs.length) return renderExamResult(set, qs, results);
   const q = qs[i];
-  let plays = 0;
+  q.plays ||= 0;   // 聞いた回数は問題に持たせる（ふりがなを切り替えて描き直しても、2回までのまま）
+  const answered = () => results.some(r => r.id === q.id);
   show(`
     <button class="back link">← ${esc(t("home"))}</button>
     <div class="row between"><h1>📝 ${esc(set.name)}（${i + 1}/${qs.length}）</h1>
@@ -770,7 +883,7 @@ function renderExamQ(set, qs, i, results) {
       ? `<div class="answers ${q.choicesShown.length === 2 ? "ox" : ""}">${q.choicesShown.map((c, k) => `<button class="ans" data-k="${k}">${q.choicesShown.length > 2 ? k + 1 + ". " : ""}${esc(c)}</button>`).join("")}</div>`
       : `<button id="reveal" class="primary">${esc(t("showAnswer"))}</button>`}
     <div id="res"></div>`);
-  $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
+  $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
   // こたえを見て自分で〇つけする問題
   const $rev = document.getElementById("reveal");
   if ($rev) $rev.onclick = () => {
@@ -781,19 +894,19 @@ function renderExamQ(set, qs, i, results) {
         ${ex ? `<p>${esc(ex)}</p>` : ""}<p class="note">${esc(q.explain_ja)}</p></section>
       <div class="row"><button id="selfok" class="sub">✅ ${esc(t("gotIt"))}</button><button id="selfng" class="sub">🔁 ${esc(t("notYet"))}</button></div>`;
     $r.scrollIntoView({ behavior: "smooth", block: "start" });
-    const go = ok => { results.push({ id: q.id, ok }); renderExamQ(set, qs, i + 1, results); };
+    const go = ok => { if (!answered()) results.push({ id: q.id, ok }); renderExamQ(set, qs, i + 1, results); };
     document.getElementById("selfok").onclick = () => go(true);
     document.getElementById("selfng").onclick = () => go(false);
   };
   $app.querySelector(".back").onclick = renderHome;
   document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderExamQ(set, qs, i, results); };
   const $play = document.getElementById("play");
-  if ($play) $play.onclick = () => { if (plays >= 2) return; plays++; playScript(q.script); if (plays >= 2) $play.disabled = true; };
+  if ($play) { if (q.plays >= 2) $play.disabled = true; $play.onclick = () => { if (q.plays >= 2) return; q.plays++; playScript(q.script); if (q.plays >= 2) $play.disabled = true; }; }
   $app.querySelectorAll(".ans").forEach(b => b.onclick = () => {
     const k = +b.dataset.k, ok = k === q.answerShown;
     $app.querySelectorAll(".ans").forEach(x => { x.disabled = true; if (+x.dataset.k === q.answerShown) x.classList.add("right"); });
     if (!ok) b.classList.add("wrong");
-    results.push({ id: q.id, ok });
+    if (!answered()) results.push({ id: q.id, ok });   // ふりがなを切り替えて描き直しても、2回は数えない
     const ex = L() === "ja" ? q.explain_ja : q[`explain_${L()}`] || q.explain_en;
     document.getElementById("res").innerHTML = `
       <section class="card result ${ok ? "ok" : ""}">
@@ -880,7 +993,7 @@ function renderSettings() {
       <p>${sessions.length} ${esc(t("times"))} ・ ${(totalSec / 60).toFixed(1)} ${esc(t("minutes"))} ・ ${esc(t("estCost"))} ${totalYen.toFixed(1)}円
         ${totalSec ? `（${(totalYen / (totalSec / 60)).toFixed(2)}円/${esc(t("minutes"))}）` : ""}</p>
       <table class="rec"><tr><th>${esc(t("date"))}</th><th>${esc(t("scene"))}</th><th>${esc(t("seconds"))}</th><th>${esc(t("goalShort"))}</th><th>円</th></tr>
-      ${sessions.map(s => `<tr><td>${esc(s.at.slice(5, 16).replace("T", " "))}</td><td>${esc(s.type === "exam" ? `📝 ${s.exam} ${s.score}/${s.total}` : s.type === "drill" ? "👂 " + s.drill : SCENES.find(x => x.id === s.scene)?.title_ja.slice(0, 10) || s.scene)}</td>
+      ${sessions.map(s => `<tr><td>${esc(fmtAt(s.at))}</td><td>${esc(s.type === "exam" ? `📝 ${s.exam} ${s.score}/${s.total}` : s.type === "drill" ? "👂 " + s.drill : SCENES.find(x => x.id === s.scene)?.title_ja.slice(0, 10) || s.scene)}</td>
         <td>${s.seconds}</td><td>${s.type === "drill" ? (s.ok ? "○" : "△") : s.feedback ? (s.feedback.goal_achieved ? "○" : "△") : "−"}</td><td>${cost(s).toFixed(1)}</td></tr>`).join("")}
       </table>
       <button id="export" class="sub">${esc(t("export"))}</button>
@@ -891,7 +1004,11 @@ function renderSettings() {
     </div></section>`);
   $app.querySelector(".back").onclick = renderHome;
   $app.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => { setLang(b.dataset.lang); renderSettings(); });
-  document.getElementById("saveKey").onclick = () => { S.setKey(document.getElementById("key").value); alert("OK"); };
+  document.getElementById("saveKey").onclick = () => {
+    const v = document.getElementById("key").value.trim();
+    if (!v && S.getKey() && !confirm(t("deleteKeyConfirm"))) return;
+    S.setKey(v); ttsFailAt = 0; voiceCache.clear(); alert("OK");
+  };
   document.getElementById("auto").onclick = async () => {
     preloadGis();   // iPhone でログイン画面を開けるよう、押した直後に読み込みを始める
     const $s = document.getElementById("autoStatus"), btn = document.getElementById("auto");

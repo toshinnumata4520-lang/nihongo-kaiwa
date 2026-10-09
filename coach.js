@@ -5,9 +5,9 @@ export const TEXT_MODEL = "gemini-3.5-flash-lite";
 const URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 async function generate(key, prompt, schema) {
-  const res = await fetch(`${URL_BASE}/${TEXT_MODEL}:generateContent?key=${encodeURIComponent(key)}`, {
+  const res = await fetch(`${URL_BASE}/${TEXT_MODEL}:generateContent`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.3 },
@@ -15,7 +15,9 @@ async function generate(key, prompt, schema) {
   });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).join("") || "{}";
+  const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).join("");
+  // 安全フィルタなどで返事が空のときは、空の結果で先へ進めず、失敗として扱う
+  if (!text) throw new Error("empty: " + (data.promptFeedback?.blockReason || data.candidates?.[0]?.finishReason || "no candidates"));
   return { result: JSON.parse(text), usage: data.usageMetadata || {} };
 }
 
@@ -119,6 +121,11 @@ ${isAsk
   : `正しい対応は、大事な情報を復唱して確かめること。必ず入れる情報: ${drill.slots.join(" / ")}
 すべての情報が正しく入っていれば ok=true。数字・場所・時間の間違いは ok=false。「わかりました」だけで復唱していなければ ok=false。`}
 学習者の返事（音声の文字起こしまたは入力。句読点や漢字の違いは気にしない）: 「${said}」
+判定のきまり:
+- 数字は、算用数字・漢数字・ひらがなの読みを同じものとして扱う（例：20個＝二十個＝にじゅっこ＝にじっこ、10時＝十時＝じゅうじ、305＝さんまるご＝さんびゃくご）。
+- 音声認識の聞き間違いらしいもの（同じ音の別の漢字）は、音が合っていれば言えたことにする。比べる前に、頭の中で両方をひらがなに直す。
+- 情報は同じ意味なら言い方は問わない（3卓＝3番テーブル、オレンジ＝オレンジジュース、「〇〇さんのところ」＝「そちら」）。指示で使われた言い方をそのまま繰り返すのも正解。
+${isAsk ? "" : "- 丁寧に聞き返した場合（「すみません、もう一度お願いします」など）は ok=false のままでよいが、comment で「聞き返せたのはとてもいい」とほめてから、次は復唱しようと伝える。\n"}- checks は${isAsk ? "聞き返すべき点" : "必ず入れる情報"}と同じ順・同じ数で返し、item にはその情報の名前をそのまま入れる。
 - checks: ${isAsk ? "聞き返すべき点" : "必ず入れる情報"}ごとに、言えたか（ok）
 - comment_ja: やさしい日本語で、できたことをほめてから、足りない点を1つ（50字以内）
 - comment: 同じ内容を${{ ja: "やさしい日本語", en: "English", vi: "Vietnamese" }[lang] || "English"}で`;

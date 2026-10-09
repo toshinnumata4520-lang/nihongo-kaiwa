@@ -127,3 +127,13 @@ rt { font-size: 11px; color: var(--accent); }
 @keyframes recpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(198, 40, 40, .55); } 50% { box-shadow: 0 0 0 14px rgba(198, 40, 40, 0); } }
 .livecap { border: 3px dashed #c62828; border-radius: 14px; padding: 14px; font-size: 20px; min-height: 56px; margin: 4px 0 10px; background: #fff; }
 .livecap .placeholder { color: var(--sub); font-size: 16px; }
+
+/* 押しやすさ（点検の指摘：44px 未満のボタン・小さいチェック） */
+.link, .back { min-height: 44px; }
+.say { min-width: 44px; min-height: 40px; }
+summary { padding: 10px 0; min-height: 24px; }
+.toggle { min-height: 44px; padding: 0 8px; }
+.toggle input, .check input { width: 22px; height: 22px; flex: none; }
+.check > span, .check { line-height: 1.5; }
+.ans:disabled.right, .ans:disabled.wrong { opacity: 1; }
+h1 .ja { display: inline; margin-left: 6px; }

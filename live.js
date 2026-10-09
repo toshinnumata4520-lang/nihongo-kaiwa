@@ -9,38 +9,54 @@ const WORKLET = `registerProcessor("tap", class extends AudioWorkletProcessor {
 });`;
 
 let state = null;
+const dec = new TextDecoder();
+const parse = d => JSON.parse(typeof d === "string" ? d : dec.decode(d));   // 届いた順に同期で処理する（await すると順番が入れ替わることがある）
 
 // onText(who, text, done)  who = "me" | "ai"
 // onUsage(usageMetadata)    サーバーが返す使用量（原価の実測に使う）
 // onTurn(state)             "wait"=AIが話し始めるのを待つ / "ai"=AIが話している / "you"=学習者の番 / "hearing"=学習者の声を聞き取り中
 // onLevel(0〜1)             マイクの音の大きさ（声を拾えているかの表示用）
+// onClose(err)              接続が切れた。err はエラーのとき理由の文字、ふつうに閉じたときは null
+// 起動中の失敗は例外で返す（呼び出し側でエラー表示）。マイクが使えないときは false
 export async function startConversation({ key, systemText, openingText, onText, onStatus, onUsage, onClose, onTurn, onLevel }) {
   stopConversation();
   // iPhone はタップ操作の中で AudioContext を作らないと音が出ないので、await より前に作る
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const st = state = { ctx, onText, onStatus, onUsage, onClose, onTurn: onTurn || (() => {}), onLevel: onLevel || (() => {}),
-    ws: null, ready: false, stream: null, node: null, aiSpeaking: false, turnDone: true,
-    pending: [], pendingLen: 0, playAt: 0, stopped: false, sources: [], startedAt: Date.now() };
+    ws: null, ready: false, stream: null, node: null, aiSpeaking: false, turnDone: true, turn: "wait",
+    pending: [], pendingLen: 0, playAt: 0, stopped: false, sources: [], startedAt: Date.now(), quietMs: 0, flushed: false };
+  st.setTurn = s => { st.turn = s; st.onTurn(s); };
+  // 起動の途中で「おわる」や画面の切り替えがあったら、開いたマイクを閉じて終わる
+  const aborted = () => { if (!st.stopped) return false; st.stream?.getTracks().forEach(t => t.stop()); return true; };
   try {
     st.stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-  } catch {
-    onStatus("mic-denied", true);
+  } catch (e) {
+    if (aborted()) return false;
+    onStatus("mic-denied", true, e?.name || "");
     stopConversation();
     return false;
   }
-  await ctx.resume();
-  const url = URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }));
-  await ctx.audioWorklet.addModule(url);
-  URL.revokeObjectURL(url);
-  const src = ctx.createMediaStreamSource(st.stream);
-  st.node = new AudioWorkletNode(ctx, "tap");
-  st.node.port.onmessage = e => onMic(st, e.data);
-  src.connect(st.node);
-  const mute = ctx.createGain(); mute.gain.value = 0;   // 無音で出力に繋がないと Safari が処理を止めることがある
-  st.node.connect(mute).connect(ctx.destination);
+  if (aborted()) return false;
+  try {
+    await ctx.resume(); if (aborted()) return false;
+    const url = URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }));
+    await ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    if (aborted()) return false;
+    const src = ctx.createMediaStreamSource(st.stream);
+    st.node = new AudioWorkletNode(ctx, "tap");
+    st.node.port.onmessage = e => onMic(st, e.data);
+    src.connect(st.node);
+    const mute = ctx.createGain(); mute.gain.value = 0;   // 無音で出力に繋がないと Safari が処理を止めることがある
+    st.node.connect(mute).connect(ctx.destination);
+  } catch (e) {
+    if (state === st) stopConversation(); else st.stream?.getTracks().forEach(t => t.stop());
+    throw e;
+  }
 
   const ws = st.ws = new WebSocket(`${WS_URL}?key=${encodeURIComponent(key)}`);
+  ws.binaryType = "arraybuffer";
   ws.onopen = () => ws.send(JSON.stringify({ setup: {
     model: `models/${LIVE_MODEL}`,
     systemInstruction: { parts: [{ text: systemText }] },
@@ -51,22 +67,28 @@ export async function startConversation({ key, systemText, openingText, onText, 
     // 話し始めの判定だけ鈍くする（雑音で反応しないように）。話し終わりの判定は標準のまま（遅くすると返事が遅れる）
     realtimeInputConfig: { automaticActivityDetection: { startOfSpeechSensitivity: "START_SENSITIVITY_LOW" } },
   } }));
-  ws.onmessage = async e => {
-    const msg = JSON.parse(typeof e.data === "string" ? e.data : await e.data.text());
+  ws.onmessage = e => {
+    if (st.stopped) return;
+    let msg; try { msg = parse(e.data); } catch { return; }
     if (msg.usageMetadata) st.onUsage?.(msg.usageMetadata);
     if (msg.setupComplete) {
       st.ready = true;
       onStatus("listening");
-      st.onTurn("wait");
+      st.setTurn("wait");
       // AIから話し始めてもらう（最初の一言は場面データで決める）
       if (openingText) ws.send(JSON.stringify({ realtimeInput: { text: openingText } }));
+      // AIが話し始めないときは、6秒で学習者の番にする（「まってください」のまま止まらないように）
+      st.waitTimer = setTimeout(() => { if (!st.stopped && !st.aiSpeaking && !st.sources.length && st.turn === "wait") yourTurn(st); }, 6000);
       return;
     }
     if (msg.goAway) { onStatus("time-up"); return; }
     const c = msg.serverContent;
     if (!c) return;
-    if (c.interrupted) { stopPlayback(st); st.aiSpeaking = false; st.turnDone = true; st.onTurn("hearing"); }   // 学習者が話し始めたら、AIの声を止める
-    if (c.inputTranscription?.text) { st.onText("me", c.inputTranscription.text, false); if (!st.aiSpeaking) st.onTurn("hearing"); }
+    if (c.interrupted) {   // 学習者が話し始めたら、AIの声を止める
+      stopPlayback(st); st.aiSpeaking = false; st.turnDone = true;
+      st.onText("ai", "", true); st.setTurn("hearing");
+    }
+    if (c.inputTranscription?.text) st.onText("me", c.inputTranscription.text, false);
     if (c.outputTranscription?.text) st.onText("ai", c.outputTranscription.text, false);
     for (const p of c.modelTurn?.parts || []) if (p.inlineData?.data) { st.turnDone = false; play(st, p.inlineData.data); }
     if (c.turnComplete) {
@@ -77,18 +99,27 @@ export async function startConversation({ key, systemText, openingText, onText, 
   };
   ws.onclose = e => {
     st.ready = false;
-    if (!st.stopped && state === st) { onStatus("closed", e.code !== 1000, `${e.code} ${e.reason || ""}`); st.onClose?.(); }
+    if (!st.stopped && state === st) {
+      const err = e.code !== 1000 ? `${e.code} ${e.reason || ""}`.trim() : null;
+      onStatus("closed", !!err, err || "");
+      st.onClose?.(err);
+    }
   };
   return true;
 }
 
 // せりふの読み上げ：会話と同じ Live API に、文を一字一句そのまま読ませて、声（24kHz・16bit PCM）だけを受け取る。
-// 会話で使えている仕組みなので、TTS専用の窓口より確実。話し方（早口・関西弁など）と読み方も指示する
-export function liveSpeak(key, text, { style = "", reading = "", voice = "" } = {}) {
+// 会話で使えている仕組みなので、TTS専用の窓口より確実。話し方（早口・関西弁など）と読み方も指示する。
+// signal（AbortSignal）で、画面が変わったときに途中で止められる
+export function liveSpeak(key, text, { style = "", reading = "", voice = "", signal } = {}) {
   const attempt = withVoice => new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(new DOMException("aborted", "AbortError")); return; }
     const ws = new WebSocket(`${WS_URL}?key=${encodeURIComponent(key)}`);
-    const chunks = []; let done = false;
-    const timer = setTimeout(() => { if (!done) { done = true; try { ws.close(1000); } catch {} reject(new Error("timeout")); } }, 20000);
+    ws.binaryType = "arraybuffer";
+    const chunks = []; let done = false, setupOk = false;
+    const fail = err => { if (done) return; done = true; clearTimeout(timer); try { ws.close(1000); } catch {} reject(err); };
+    const timer = setTimeout(() => fail(new Error("timeout")), 15000);
+    signal?.addEventListener("abort", () => fail(new DOMException("aborted", "AbortError")), { once: true });
     ws.onopen = () => ws.send(JSON.stringify({ setup: {
       model: `models/${LIVE_MODEL}`,
       systemInstruction: { parts: [{ text:
@@ -97,16 +128,18 @@ export function liveSpeak(key, text, { style = "", reading = "", voice = "" } = 
       generationConfig: { responseModalities: ["AUDIO"],
         ...(withVoice && voice ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } : {}) },
     } }));
-    ws.onmessage = async e => {
-      const msg = JSON.parse(typeof e.data === "string" ? e.data : await e.data.text());
+    ws.onmessage = e => {
+      if (done) return;
+      let msg; try { msg = parse(e.data); } catch { return; }
       if (msg.setupComplete) {
+        setupOk = true;
         ws.send(JSON.stringify({ realtimeInput: { text:
           `話し方：${style || "自然に"}\n${reading ? `読み方：${reading}\n` : ""}せりふ：${text}` } }));
         return;
       }
       const c = msg.serverContent;
       for (const p of c?.modelTurn?.parts || []) if (p.inlineData?.data) chunks.push(p.inlineData.data);
-      if (c?.turnComplete && !done) {
+      if (c?.turnComplete) {
         done = true; clearTimeout(timer); try { ws.close(1000); } catch {}
         let total = 0; const parts = chunks.map(b => { const s = atob(b); total += s.length; return s; });
         const bytes = new Uint8Array(total); let o = 0;
@@ -114,22 +147,29 @@ export function liveSpeak(key, text, { style = "", reading = "", voice = "" } = 
         bytes.length ? resolve({ bytes, rate: 24000, isWav: false }) : reject(new Error("no audio"));
       }
     };
-    ws.onclose = e => { if (!done) { done = true; clearTimeout(timer); reject(new Error(`closed ${e.code} ${e.reason || ""}`)); } };
+    ws.onclose = e => { const er = new Error(`closed ${e.code} ${e.reason || ""}`); er.setupFailed = !setupOk; fail(er); };
   });
-  // 声の指定が受け付けられないときは、指定なしでやり直す
-  return attempt(true).catch(err => voice ? attempt(false) : Promise.reject(err));
+  // 声の指定が受け付けられないとき（つないですぐ断られたとき）だけ、指定なしでやり直す
+  return attempt(true).catch(err => voice && err.setupFailed ? attempt(false) : Promise.reject(err));
 }
 
+// 会話中にアプリが別の音（お手本の🔊など）を鳴らす間、その音をマイクが拾って学習者の発言と誤解されないよう、マイクを止める
+export function muteFor(ms) { if (state) state.muteUntil = Math.max(state.muteUntil || 0, Date.now() + ms); }
+
 // 学習者のボタン操作（ヒント・ゆっくり）を、AIへの指示として送る
+// 送れたら true（つながっていないときは false）
 export function sendNote(text) {
   const st = state;
-  if (st?.ready && st.ws.readyState === 1) st.ws.send(JSON.stringify({ realtimeInput: { text } }));
+  if (st?.ready && st.ws.readyState === 1) { st.ws.send(JSON.stringify({ realtimeInput: { text } })); return true; }
+  return false;
 }
 
 export function stopConversation() {
   const st = state; state = null;
   if (!st) return 0;
   st.stopped = true;
+  clearTimeout(st.waitTimer);
+  stopPlayback(st);
   try { st.ws?.close(1000); } catch {}   // 正しく閉じないと、古い接続が残って次の接続が断られることがある
   st.stream?.getTracks().forEach(t => t.stop());
   try { st.node?.disconnect(); } catch {}
@@ -149,12 +189,26 @@ function onMic(st, f32) {
   // AIが話している間（と話し終わってすぐ）は、マイクの音を送らない。
   // スピーカーから出たAIの声をマイクが拾って「学習者が話した」と誤判定され、AIが止まるのを防ぐ
   const muted = st.aiSpeaking || Date.now() < (st.muteUntil || 0);
-  st.onLevel(muted ? 0 : Math.min(1, Math.sqrt(sum / all.length) * 8));
+  const level = muted ? 0 : Math.min(1, Math.sqrt(sum / all.length) * 8);
+  st.onLevel(level);
   if (muted || !st.ready || st.ws.readyState !== 1) return;
+  // 「聞いています」は、学習者の番に本当に声が出たときだけにする（前の発言の文字起こしが遅れて届いても変えない）
+  const ms = all.length / rate * 1000;
+  if (level > 0.15) { st.quietMs = 0; if (st.turn === "you" || st.turn === "wait") { st.flushed = false; st.setTurn("hearing"); } }
+  else st.quietMs += ms;
+  // 話し終わって2秒たってもAIが返事を始めないときは、「話し終わった」と知らせる（「聞いています」のまま長く待たないように）
+  if (st.turn === "hearing" && !st.flushed && st.quietMs > 2000) {
+    st.flushed = true;
+    st.ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
+  }
   const outLen = Math.floor(all.length * 16000 / rate);
   const pcm = new Int16Array(outLen);
+  const step = rate / 16000;
   for (let i = 0; i < outLen; i++) {
-    const s = Math.max(-1, Math.min(1, all[Math.floor(i * rate / 16000)]));
+    // 間引くだけだと音がひずむので、区間の平均を取る
+    const a = Math.floor(i * step), b = Math.max(a + 1, Math.floor((i + 1) * step));
+    let acc = 0; for (let j = a; j < b; j++) acc += all[j] || 0;
+    const s = Math.max(-1, Math.min(1, acc / (b - a)));
     pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
   }
   st.ws.send(JSON.stringify({ realtimeInput: { audio: { data: toBase64(new Uint8Array(pcm.buffer)), mimeType: "audio/pcm;rate=16000" } } }));
@@ -180,7 +234,8 @@ function play(st, b64) {
   node.start(st.playAt);
   st.playAt += buf.duration;
   st.sources.push(node);
-  if (!st.aiSpeaking) { st.aiSpeaking = true; st.onTurn("ai"); }
+  clearTimeout(st.waitTimer);
+  if (!st.aiSpeaking) { st.aiSpeaking = true; st.setTurn("ai"); }
   node.onended = () => {
     st.sources = st.sources.filter(s => s !== node);
     // AIの発言が終わり、声も流し終わったら、学習者の番
@@ -197,5 +252,6 @@ function stopPlayback(st) {
 function yourTurn(st) {
   st.aiSpeaking = false;
   st.muteUntil = Date.now() + 400;
-  setTimeout(() => { if (!st.stopped && !st.aiSpeaking) st.onTurn("you"); }, 400);
+  st.quietMs = 0; st.flushed = false;
+  setTimeout(() => { if (!st.stopped && !st.aiSpeaking) st.setTurn("you"); }, 400);
 }
