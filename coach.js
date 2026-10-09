@@ -51,6 +51,32 @@ ${lines || "（会話なし）"}
   return generate(key, prompt, schema);
 }
 
+// 「聞いて くりかえす」の判定：復唱に必要な情報が入っているか、足りない指示では聞き返せたか
+export function judgeDrill(key, drill, said, lang) {
+  const isAsk = drill.kind === "ask";
+  const prompt = `外国人の働く人が、職場で日本人から次の指示を聞きました（${drill.speaker}、${drill.style}）。
+指示: 「${drill.say}」
+${isAsk
+  ? `この指示は情報が足りないので、正しい対応は「聞き返す」こと。聞き返すべき点: ${drill.ask.join(" / ")}
+学習者が、足りない点を1つ以上、丁寧に聞き返せていれば ok=true（「わかりました」「はい」だけなら ok=false。わかったふりは一番危ない）。`
+  : `正しい対応は、大事な情報を復唱して確かめること。必ず入れる情報: ${drill.slots.join(" / ")}
+すべての情報が正しく入っていれば ok=true。数字・場所・時間の間違いは ok=false。「わかりました」だけで復唱していなければ ok=false。`}
+学習者の返事（音声の文字起こしまたは入力。句読点や漢字の違いは気にしない）: 「${said}」
+- checks: ${isAsk ? "聞き返すべき点" : "必ず入れる情報"}ごとに、言えたか（ok）
+- comment_ja: やさしい日本語で、できたことをほめてから、足りない点を1つ（50字以内）
+- comment: 同じ内容を${{ ja: "やさしい日本語", en: "English", vi: "Vietnamese" }[lang] || "English"}で`;
+  const schema = {
+    type: "OBJECT",
+    properties: {
+      ok: { type: "BOOLEAN" },
+      checks: { type: "ARRAY", items: { type: "OBJECT", properties: { item: { type: "STRING" }, ok: { type: "BOOLEAN" } }, required: ["item", "ok"] } },
+      comment_ja: { type: "STRING" }, comment: { type: "STRING" },
+    },
+    required: ["ok", "checks", "comment_ja", "comment"],
+  };
+  return generate(key, prompt, schema);
+}
+
 // 言い直し・復習の判定：言いたい文と、学習者が実際に言った（または入力した）文を比べる
 export function judgeRetry(key, target, said) {
   const prompt = `外国人の日本語学習者が、次の文を言う練習をしました。

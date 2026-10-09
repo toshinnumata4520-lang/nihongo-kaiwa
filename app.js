@@ -3,11 +3,12 @@ import { SCENES } from "./scenes.js";
 import { SITUATIONS } from "./situations.js";
 import { SAFETY_RULES, mask } from "./safety.js";
 import { startConversation, stopConversation, sendNote, LIVE_MODEL } from "./live.js";
-import { makeFeedback, judgeRetry, TEXT_MODEL } from "./coach.js";
+import { makeFeedback, judgeRetry, judgeDrill, TEXT_MODEL } from "./coach.js";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js";
 import * as S from "./store.js";
 import { autoSetup, preloadGis } from "./setup.js";
 
-const CONSENT_VERSION = "trial-2026-10-v1";
+const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
 const YEN = 150;                               // 1ドル＝150円で試算
 // 料金（1ドル単位・100万トークンあたり）。原価の実測用の目安。正式な単価は料金表で再確認する
@@ -79,6 +80,11 @@ function renderHome() {
       <div><b>${S.practiceDays()}</b><small>${bi("daysPracticed")}</small></div>
       <button id="review" class="statbtn ${due ? "due" : ""}"><b>${due}</b><small>${bi("reviewToday")}</small></button>
     </section>
+    <section class="card drillentry">
+      <h2>👂 ${bi("drillTitle")}</h2>
+      <p class="note">${esc(t("drillNote"))}</p>
+      <div class="row">${DRILL_INDUSTRIES.map(i => `<button class="choice" data-ind="${esc(i)}">${esc(i)}</button>`).join("")}</div>
+    </section>
     <h2>${bi("scenes")}</h2>
     ${SCENES.map(sc => {
       const st = S.sceneStatus(sc.id);
@@ -91,6 +97,7 @@ function renderHome() {
     }).join("")}
     <p class="note">${bi("aiNote")}</p>`);
   $app.querySelectorAll(".scene").forEach(b => b.onclick = () => renderPrep(SCENES.find(s => s.id === b.dataset.id)));
+  $app.querySelectorAll("[data-ind]").forEach(b => b.onclick = () => renderDrill(DRILLS.filter(d => d.industry === b.dataset.ind), 0));
   document.getElementById("review").onclick = renderReview;
   document.getElementById("settings").onclick = renderSettings;
 }
@@ -346,6 +353,74 @@ function renderRetry(sc, fix, fromReview = null) {
   document.getElementById("typeForm").onsubmit = e => { e.preventDefault(); judge(document.getElementById("typeBox").value.trim()); };
 }
 
+// ───── 聞いて くりかえす（復唱・聞き返し） ─────
+// 指示の文字は最初は隠す（聞き取りの練習）。分からないときは聞き返すのが正解の問題もある
+function speak(text, rate) {
+  if (!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; u.rate = rate;
+  const v = speechSynthesis.getVoices().find(v => v.lang === "ja-JP"); if (v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+
+function renderDrill(list, i) {
+  if (i >= list.length) { renderHome(); return; }
+  const d = list[i];
+  const rate = d.style === "早口" || d.style === "略語" ? 1.3 : 1.1;   // 現場の速さに近づける
+  const log = { replays: 0, slow: 0, revealed: false };
+  show(`
+    <button class="back link">← ${esc(t("home"))}</button>
+    <h1>👂 ${bi("drillTitle")}（${i + 1}/${list.length}）</h1>
+    <section class="card situation">
+      <p class="big">🗣 ${esc(d.speaker)}<span class="tag">${esc(d.style)}</span></p>
+      <p>${bi("drillTask")}</p>
+      <div class="row">
+        <button id="play" class="primary">▶ ${esc(t("listen"))}</button>
+        <button id="slow" class="sub">🐢 ${esc(t("listenSlow"))}</button>
+      </div>
+      <details id="reveal"><summary class="note">${esc(t("showText"))}</summary><p class="big">${esc(d.say)}</p></details>
+      <p class="note">💡 ${esc(t("askTip"))}</p>
+    </section>
+    <button id="mic" class="primary big">🎙 ${esc(t("speak"))}</button>
+    <form id="typeForm" class="row"><input id="typeBox" placeholder="${esc(t("typeHere"))}"><button class="sub">${esc(t("send"))}</button></form>
+    <div id="res"></div>`);
+  $app.querySelector(".back").onclick = renderHome;
+  document.getElementById("play").onclick = () => { log.replays++; speak(d.say, rate); };
+  document.getElementById("slow").onclick = () => { log.slow++; speak(d.say, 0.75); };
+  document.getElementById("reveal").ontoggle = e => { if (e.target.open) log.revealed = true; };
+  setTimeout(() => { log.replays++; speak(d.say, rate); }, 400);   // 最初に1回、自動で流す
+  const $res = document.getElementById("res");
+  const judge = async said => {
+    if (!said) { $res.innerHTML = `<p class="status">${esc(t("notHeard"))}</p>`; return; }
+    $res.innerHTML = `<p class="status">${esc(t("checking"))}</p>`;
+    try {
+      const { result: r, usage } = await judgeDrill(S.getKey(), d, said, L());
+      S.addSession({ type: "drill", drill: d.id, at: new Date().toISOString(), seconds: 0, said, ok: r.ok, checks: r.checks, ...log, usage: { text: usage } });
+      $res.innerHTML = `
+        <section class="card result ${r.ok ? "ok" : ""}">
+          <p class="said">${esc(t("youSaid"))}：${esc(said)}</p>
+          <p class="big">${r.ok ? "✅ " + esc(t("great")) : "🔁 " + esc(t("again"))}</p>
+          <ul class="checks">${r.checks.map(c => `<li>${c.ok ? "✅" : "⬜"} ${esc(c.item)}</li>`).join("")}</ul>
+          <p>${esc(L() === "ja" ? r.comment_ja : r.comment)}</p>
+          ${L() !== "ja" ? `<p class="ja">${esc(r.comment_ja)}</p>` : ""}
+          <p class="better">${sayBtn(d.model)}${esc(t("modelAnswer"))}：<b>${esc(d.model)}</b></p>
+          <p class="note">${esc(t("instruction"))}：${esc(d.say)}</p>
+        </section>
+        <div class="row"><button id="again" class="sub">🔁 ${esc(t("tryAgain"))}</button><button id="next" class="primary">${esc(t("next"))} →</button></div>`;
+      $res.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
+      document.getElementById("again").onclick = () => renderDrill(list, i);
+      document.getElementById("next").onclick = () => renderDrill(list, i + 1);
+    } catch (e) { console.error(e); $res.innerHTML = `<p class="status err">${esc(t("error"))}</p>`; }
+  };
+  document.getElementById("mic").onclick = async () => {
+    $res.innerHTML = `<p class="status">${esc(t("listening"))}</p>`;
+    const said = await listenOnce();
+    if (said === null) { $res.innerHTML = `<p class="status">${esc(t("noSR"))}</p>`; document.getElementById("typeBox").focus(); return; }
+    judge(said);
+  };
+  document.getElementById("typeForm").onsubmit = e => { e.preventDefault(); judge(document.getElementById("typeBox").value.trim()); };
+}
+
 // ───── 復習 ─────
 function renderReview() {
   const cards = S.dueCards();
@@ -406,8 +481,8 @@ function renderSettings() {
       <p>${sessions.length} ${esc(t("times"))} ・ ${(totalSec / 60).toFixed(1)} ${esc(t("minutes"))} ・ ${esc(t("estCost"))} ${totalYen.toFixed(1)}円
         ${totalSec ? `（${(totalYen / (totalSec / 60)).toFixed(2)}円/${esc(t("minutes"))}）` : ""}</p>
       <table class="rec"><tr><th>${esc(t("date"))}</th><th>${esc(t("scene"))}</th><th>${esc(t("seconds"))}</th><th>${esc(t("goalShort"))}</th><th>円</th></tr>
-      ${sessions.map(s => `<tr><td>${esc(s.at.slice(5, 16).replace("T", " "))}</td><td>${esc(SCENES.find(x => x.id === s.scene)?.title_ja.slice(0, 10) || s.scene)}</td>
-        <td>${s.seconds}</td><td>${s.feedback ? (s.feedback.goal_achieved ? "○" : "△") : "−"}</td><td>${cost(s).toFixed(1)}</td></tr>`).join("")}
+      ${sessions.map(s => `<tr><td>${esc(s.at.slice(5, 16).replace("T", " "))}</td><td>${esc(s.type === "drill" ? "👂 " + s.drill : SCENES.find(x => x.id === s.scene)?.title_ja.slice(0, 10) || s.scene)}</td>
+        <td>${s.seconds}</td><td>${s.type === "drill" ? (s.ok ? "○" : "△") : s.feedback ? (s.feedback.goal_achieved ? "○" : "△") : "−"}</td><td>${cost(s).toFixed(1)}</td></tr>`).join("")}
       </table>
       <button id="export" class="sub">${esc(t("export"))}</button>
       <button id="wipe" class="sub danger">${esc(t("deleteRecords"))}</button>
