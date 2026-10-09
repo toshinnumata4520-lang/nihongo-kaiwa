@@ -93,8 +93,38 @@ function renderSetup() {
   [age18, agree].forEach(e => e.onchange = chk); nick.oninput = chk;
   document.getElementById("go").onclick = () => {
     S.setProfile({ nickname: nick.value.trim(), lang: L(), consent: { version: CONSENT_VERSION, at: new Date().toISOString(), age18: true } });
-    if (S.getKey()) renderHome(); else renderSettings();   // キーがまだなら、先にかんたん設定へ
+    renderHome();   // 設定画面には飛ばさない（テストで「開発者向けの画面に飛ばされてやめる」と指摘）
   };
+}
+
+// 業種：アイコン＋日本語（ふりがな）＋母語
+const INDUSTRY = {
+  "工場": { icon: "🏭", furi: "こうじょう", en: "Factory", vi: "Nhà máy" },
+  "建設": { icon: "🏗️", furi: "けんせつ", en: "Construction", vi: "Xây dựng" },
+  "介護": { icon: "🧓", furi: "かいご", en: "Care work", vi: "Chăm sóc (Kaigo)" },
+  "旅館・ホテル": { icon: "🏨", furi: "りょかん・ほてる", en: "Hotel / Ryokan", vi: "Khách sạn / Ryokan" },
+  "飲食": { icon: "🍽️", furi: "いんしょく", en: "Restaurant", vi: "Nhà hàng" },
+};
+function industryLabel(i) {
+  const x = INDUSTRY[i] || { icon: "", furi: "" };
+  return `<span class="indicon">${x.icon}</span><ruby>${esc(i)}<rt>${esc(x.furi)}</rt></ruby>${L() !== "ja" && x[L()] ? `<small>${esc(x[L()])}</small>` : ""}`;
+}
+
+// AIの準備（キー）がまだのとき：開発者向けの設定画面に飛ばさず、やさしく説明して、すぐできる練習へ案内する
+function renderNeedSetup() {
+  show(`
+    <button class="back link">← ${esc(t("home"))}</button>
+    <section class="card goal">
+      <h2>🔒 ${bi("needSetupTitle")}</h2>
+      <p>${bi("needSetupBody")}</p>
+    </section>
+    <button id="goDrill" class="primary">👂 ${bi("drillTitle")}</button>
+    <button id="goExam" class="primary">📝 ${bi("examTitle")}</button>
+    <details><summary class="note">${esc(t("forStaff"))}</summary><button id="goSettings" class="sub">⚙ ${esc(t("settings"))}</button></details>`);
+  $app.querySelector(".back").onclick = renderHome;
+  document.getElementById("goDrill").onclick = () => renderDrill(DRILLS.filter(d => d.industry === DRILL_INDUSTRIES[0]), 0);
+  document.getElementById("goExam").onclick = () => startExam(EXAM_SETS[0]);
+  document.getElementById("goSettings").onclick = renderSettings;
 }
 
 // ───── ホーム ─────
@@ -102,7 +132,7 @@ function renderHome() {
   const due = S.dueCards().length;
   const label = { new: "st_new", trying: "st_trying", done: "st_done", fluent: "st_fluent" };
   show(`
-    <header class="top"><h1>${bi("appName")}</h1><button id="settings" class="link">⚙</button></header>
+    <header class="top"><h1>${bi("appName")}</h1><button id="settings" class="sub settingsbtn" aria-label="settings">⚙ ${esc(t("settingsShort"))}</button></header>
     <section class="stats">
       <div><b>${S.practiceDays()}</b><small>${bi("daysPracticed")}</small></div>
       <button id="review" class="statbtn ${due ? "due" : ""}"><b>${due}</b><small>${bi("reviewToday")}</small></button>
@@ -110,7 +140,7 @@ function renderHome() {
     <section class="card drillentry">
       <h2>👂 ${bi("drillTitle")}</h2>
       <p class="note">${esc(t("drillNote"))}</p>
-      <div class="row">${DRILL_INDUSTRIES.map(i => `<button class="choice" data-ind="${esc(i)}">${esc(i)}</button>`).join("")}</div>
+      <div class="row">${DRILL_INDUSTRIES.map(i => `<button class="choice ind" data-ind="${esc(i)}">${industryLabel(i)}</button>`).join("")}</div>
     </section>
     <section class="card">
       <h2>📝 ${bi("examTitle")}</h2>
@@ -225,7 +255,7 @@ function renderPrep(sc) {
       <div class="levels">${LEVELS.map(x => `<button class="choice lv ${x.n === lv ? "on" : ""}" data-lv="${x.n}">${esc(t(x.k))}${x.n === rec ? `<small>★${esc(t("recommended"))}</small>` : ""}</button>`).join("")}</div>
       <p class="note">${esc(t(LEVELS.find(x => x.n === lv).k + "Note"))}</p>
     </section>
-    <button id="start" class="primary big">${bi("start")}</button>`);
+    <div class="stickybar"><button id="start" class="primary big">${S.getKey() ? "" : "🔒 "}${bi("start")}</button></div>`);
   $app.querySelector(".back").onclick = renderHome;
   $app.querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { setLevel(sc, +b.dataset.lv); renderPrep(sc); });
   document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderPrep(sc); };
@@ -284,7 +314,7 @@ ${levelRule}
 
 function renderTalk(sc) {
   const key = S.getKey();
-  if (!key) { alert(t("noKey")); renderSettings(); return; }
+  if (!key) { renderNeedSetup(); return; }
   const transcript = [];          // { who, text }
   const usage = [];               // Live の usageMetadata（原価の実測用）
   let hintIdx = 0, timer = null, finished = false;
@@ -569,6 +599,18 @@ function renderDrill(list, i) {
   const $res = document.getElementById("res");
   const judge = async said => {
     if (!said) { $res.innerHTML = `<p class="status">${esc(t("notHeard"))}</p>`; return; }
+    if (!S.getKey()) {   // AIの判定が使えないときは、お手本を見て自分で答え合わせして先へ進める
+      $res.innerHTML = `<section class="card"><p class="said">${esc(t("youSaid"))}：${esc(said)}</p>
+        <p class="note">${esc(t("selfCheck"))}</p>
+        <p class="better">${sayBtn(d.model_kana || d.model)}${esc(t("modelAnswer"))}：<b>${esc(d.model)}</b></p>
+        <p class="note">${esc(t("instruction"))}：${esc(d.say)}</p></section>
+        <div class="row"><button id="again" class="sub">🔁 ${esc(t("tryAgain"))}</button><button id="next" class="primary">${esc(t("next"))} →</button></div>`;
+      $res.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
+      document.getElementById("again").onclick = () => renderDrill(list, i);
+      document.getElementById("next").onclick = () => renderDrill(list, i + 1);
+      $res.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
     $res.innerHTML = `<p class="status">${esc(t("checking"))}</p>`;
     try {
       const { result: r, usage } = await judgeDrill(S.getKey(), d, said, L());
@@ -616,12 +658,6 @@ const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i-
 function examText(q) {
   // 用語カード：語を大きく、ふりがなは語の上に
   if (q.term) return `${esc(t("cardQ"))}<br><span class="term">${S.getFurigana() ? `<ruby>${esc(q.term)}<rt>${esc(q.reading)}</rt></ruby>` : esc(q.term)}</span>`;
-  // 用法：4つの文が全部その語を使っていて、正しい使い方の文を選ぶ形だと分かるように指示を言いかえる
-  if (/用法/.test(q.section || "") && /【(.+?)】/.test(q.question_ja)) {
-    const w = q.question_ja.match(/【(.+?)】/)[1];
-    const furiW = (q.question_furigana || "").match(/【(.+?)】/)?.[1] || w;
-    return esc(t("usageQ")).replace("{w}", `<u>${S.getFurigana() ? esc(furiW).replace(/([一-龯々〆ヶ]+)\(([ぁ-んー]+)\)/g, "<ruby>$1<rt>$2</rt></ruby>") : esc(w)}</u>`);
-  }
   // ふりがなが「全文ひらがな」の問題（一問一答）は、漢字の文の下に、ひらがなの行をそえる
   if (S.getFurigana() && q.question_furigana && !/\([ぁ-ん]/.test(q.question_furigana) && q.question_furigana !== q.question_ja)
     return esc(q.question_ja).replace(/【(.+?)】/g, "<u>$1</u>").replace(/\n/g, "<br>") +
