@@ -71,6 +71,8 @@ const T = {
   goalShort:    { ja: "目標", en: "Goal", vi: "Mục tiêu" },
   export:       { ja: "きろくを ダウンロード", en: "Download records", vi: "Tải lịch sử" },
   deleteRecords:{ ja: "きろくを ぜんぶ けす", en: "Delete all records", vi: "Xóa toàn bộ lịch sử" },
+  situation:    { ja: "じょうきょう", en: "Situation", vi: "Tình huống" },
+  todo:         { ja: "やること", en: "What to do", vi: "Việc cần làm" },
   easySetup:    { ja: "かんたん設定", en: "Easy setup", vi: "Cài đặt nhanh" },
   easySetupNote:{ ja: "Googleで ログインすると、あなたの アカウントに 練習用の キーを 自動で 作ります（試験担当者 向け）", en: "Sign in with Google to create a practice key in your account automatically (for testers)", vi: "Đăng nhập Google để tự động tạo khóa luyện tập trong tài khoản của bạn (dành cho người thử nghiệm)" },
   easySetupBtn: { ja: "Googleで かんたん設定", en: "Easy setup with Google", vi: "Cài đặt nhanh bằng Google" },

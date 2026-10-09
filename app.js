@@ -1,5 +1,6 @@
 import { t, tja, getLang, setLang } from "./i18n.js";
 import { SCENES } from "./scenes.js";
+import { SITUATIONS } from "./situations.js";
 import { SAFETY_RULES, mask } from "./safety.js";
 import { startConversation, stopConversation, sendNote, LIVE_MODEL } from "./live.js";
 import { makeFeedback, judgeRetry, TEXT_MODEL } from "./coach.js";
@@ -103,6 +104,20 @@ function phraseHtml(p) {
     <span class="tr">${esc(tr)}</span></li>`;
 }
 
+// 状況カード：自分の立場・いま起きていること・伝えること。準備画面と会話中の両方に出す
+const loc = o => L() === "ja" ? o.ja : o[L()] || o.en;
+function situationHtml(sc, compact = false) {
+  const s = SITUATIONS[sc.id];
+  if (!s) return "";
+  const both = o => `${esc(loc(o))}${L() !== "ja" ? `<span class="ja">${esc(o.ja)}</span>` : ""}`;
+  return `<section class="card situation">
+    ${compact ? "" : `<h2>${bi("situation")}</h2><p>${both(s.you)}</p>`}
+    <p class="${compact ? "" : "big"}">${both(s.now)}</p>
+    <h2>${bi("todo")}</h2>
+    <ol class="todo">${s.todo.map(x => `<li>${both(x)}</li>`).join("")}</ol>
+  </section>`;
+}
+
 function renderPrep(sc) {
   show(`
     <button class="back link">← ${esc(t("home"))}</button>
@@ -112,6 +127,7 @@ function renderPrep(sc) {
       <p class="big">${esc(sceneGoal(sc))}</p>
       ${L() !== "ja" ? `<p class="ja">${esc(sc.goal_ja)}</p>` : ""}
     </section>
+    ${situationHtml(sc)}
     <section class="card">
       <div class="row between"><h2>${bi("phrases")}</h2>
         <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${esc(t("furigana"))}</label></div>
@@ -126,6 +142,8 @@ function renderPrep(sc) {
 // ───── 本番の会話 ─────
 function systemFor(sc) {
   const nick = S.getProfile()?.nickname || "学習者";
+  const s = SITUATIONS[sc.id];
+  const langName = { ja: "やさしい日本語", en: "英語", vi: "ベトナム語" }[L()] || "英語";
   return `${SAFETY_RULES}
 
 # 練習の内容
@@ -133,7 +151,15 @@ function systemFor(sc) {
 あなたの役: ${sc.ai_role}
 学習者の練習用の名前: ${nick}（本名ではない）
 今日の目標: ${sc.goal_ja}
+${s ? `学習者に見せている状況: ${s.you.ja} ${s.now.ja}
+学習者がやること（順番の目安）: ${s.todo.map((x, i) => `${i + 1}. ${x.ja}`).join(" / ")}
+この状況の設定（人名・時間・数字）に合わせて会話する。学習者に見せていない設定を勝手に増やさない。` : ""}
 この場面の注意: ${sc.safety_note}
+
+# 場面から外れたとき（先生として短く指摘する）
+- 学習者が、この場面・状況と関係ないこと、状況と合わないこと（例：遅刻の電話なのに雑談を始める、店員なのに自分が客のように話す、状況と違う時間や理由を言う）を言ったら、役をいったん止めて「（せんせい）今は${sc.title_ja.replace(/^.*?：/, "")}の場面です。〜を言いましょう。」のように、次にやることを1つだけ短く伝える。そのあと「では、もう一度。」と言って、すぐに役に戻る。
+- 学習者が何を言えばいいか分からず黙ったり「わからない」と言ったら、まだできていない「やること」の次の1つを、やさしい日本語で短く教える。2回目も伝わらなければ${langName}で一言だけ説明する。
+- 小さな文法の間違いは会話の中では直さない（あとで直す）。場面に合っていない内容のときだけ指摘する。
 
 # 話し方
 - 日本語だけで話す。学習者に合わせて、短い文で、少しゆっくり話す。1回に1つだけ質問する。
@@ -153,6 +179,7 @@ function renderTalk(sc) {
     <div class="talk">
       <div class="row between"><h1>${esc(sceneTitle(sc))}</h1><span id="clock" class="clock">5:00</span></div>
       <p id="status" class="status">${esc(t("connecting"))}</p>
+      <details class="sitbox" open><summary>${esc(t("situation"))}・${esc(t("todo"))}</summary>${situationHtml(sc, true)}</details>
       <div id="log" class="log"></div>
       <p id="hintText" class="hinttext" hidden></p>
       <div class="row">

@@ -59,6 +59,12 @@ label { display: block; }
 .better b { font-size: 19px; }
 .why { margin-top: 8px; }
 .note { font-size: 13px; color: var(--sub); }
+.situation { background: #eef3fb; border-color: #c9d6ea; }
+.todo { margin: 4px 0 0; padding-left: 22px; }
+.todo li { margin: 4px 0; }
+.sitbox summary { cursor: pointer; color: var(--accent); font-weight: 700; margin: 6px 0; }
+.sitbox .card { margin-top: 4px; }
+.talk .log { height: 34vh; }
 .say { float: right; padding: 4px 10px; margin-left: 8px; font-size: 18px; line-height: 1.2; }
 .rec { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0; }
 .rec th, .rec td { border-bottom: 1px solid var(--line); padding: 4px; text-align: left; }
