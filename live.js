@@ -48,10 +48,8 @@ export async function startConversation({ key, systemText, openingText, onText, 
     inputAudioTranscription: {},
     outputAudioTranscription: {},
     generationConfig: { responseModalities: ["AUDIO"] },
-    // 話し始めの判定を鈍く、話し終わりまでの待ちを長くする（雑音や考え中の間で切られないように）
-    realtimeInputConfig: { automaticActivityDetection: {
-      startOfSpeechSensitivity: "START_SENSITIVITY_LOW", endOfSpeechSensitivity: "END_SENSITIVITY_LOW",
-      prefixPaddingMs: 300, silenceDurationMs: 1200 } },
+    // 話し始めの判定だけ鈍くする（雑音で反応しないように）。話し終わりの判定は標準のまま（遅くすると返事が遅れる）
+    realtimeInputConfig: { automaticActivityDetection: { startOfSpeechSensitivity: "START_SENSITIVITY_LOW" } },
   } }));
   ws.onmessage = async e => {
     const msg = JSON.parse(typeof e.data === "string" ? e.data : await e.data.text());
