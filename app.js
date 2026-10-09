@@ -186,6 +186,8 @@ function renderTalk(sc) {
     <div class="talk">
       <div class="row between"><h1>${esc(sceneTitle(sc))}</h1><span id="clock" class="clock">5:00</span></div>
       <p id="status" class="status">${esc(t("connecting"))}</p>
+      <div id="turn" class="turn wait">${esc(t("connecting"))}</div>
+      <div class="meter"><div id="level"></div></div>
       <details class="sitbox" open><summary>${esc(t("situation"))}・${esc(t("todo"))}</summary>${situationHtml(sc, true)}</details>
       <div id="log" class="log"></div>
       <p id="hintText" class="hinttext" hidden></p>
@@ -204,7 +206,7 @@ function renderTalk(sc) {
       `<p class="msg ${m.who}">${esc(m.who === "me" ? mask(m.text) : m.text)}</p>`).join("");
     $log.scrollTop = $log.scrollHeight;
   };
-  const statusText = { listening: "listening", "mic-denied": "micDenied", "time-up": "timeUp", closed: "error" };
+  const statusText = { listening: "connected", "mic-denied": "micDenied", "time-up": "timeUp", closed: "error" };
 
   startConversation({
     key, systemText: systemFor(sc),
@@ -222,6 +224,13 @@ function renderTalk(sc) {
     },
     onUsage: u => usage.push(u),
     onClose: () => finish(),
+    // 今だれが話す番かを、大きく色分けして出す（「話していいのか分からない」への対応）
+    onTurn: s => {
+      const $t = document.getElementById("turn"); if (!$t) return;
+      $t.className = "turn " + s;
+      $t.innerHTML = { wait: "⏳ " + bi("turnWait"), ai: "🔊 " + bi("turnAi"), you: "🎙 " + bi("turnYou"), hearing: "👂 " + bi("turnHearing") }[s];
+    },
+    onLevel: v => { const $l = document.getElementById("level"); if ($l) $l.style.width = Math.round(v * 100) + "%"; },
   });
 
   let left = MAX_SECONDS;

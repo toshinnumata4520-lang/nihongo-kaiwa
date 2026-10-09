@@ -12,11 +12,14 @@ let state = null;
 
 // onText(who, text, done)  who = "me" | "ai"
 // onUsage(usageMetadata)    サーバーが返す使用量（原価の実測に使う）
-export async function startConversation({ key, systemText, openingText, onText, onStatus, onUsage, onClose }) {
+// onTurn(state)             "wait"=AIが話し始めるのを待つ / "ai"=AIが話している / "you"=学習者の番 / "hearing"=学習者の声を聞き取り中
+// onLevel(0〜1)             マイクの音の大きさ（声を拾えているかの表示用）
+export async function startConversation({ key, systemText, openingText, onText, onStatus, onUsage, onClose, onTurn, onLevel }) {
   stopConversation();
   // iPhone はタップ操作の中で AudioContext を作らないと音が出ないので、await より前に作る
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const st = state = { ctx, onText, onStatus, onUsage, onClose, ws: null, ready: false, stream: null, node: null,
+  const st = state = { ctx, onText, onStatus, onUsage, onClose, onTurn: onTurn || (() => {}), onLevel: onLevel || (() => {}),
+    ws: null, ready: false, stream: null, node: null, aiSpeaking: false, turnDone: true,
     pending: [], pendingLen: 0, playAt: 0, stopped: false, sources: [], startedAt: Date.now() };
   try {
     st.stream = await navigator.mediaDevices.getUserMedia({
@@ -52,6 +55,7 @@ export async function startConversation({ key, systemText, openingText, onText, 
     if (msg.setupComplete) {
       st.ready = true;
       onStatus("listening");
+      st.onTurn("wait");
       // AIから話し始めてもらう（最初の一言は場面データで決める）
       if (openingText) ws.send(JSON.stringify({ realtimeInput: { text: openingText } }));
       return;
@@ -59,11 +63,15 @@ export async function startConversation({ key, systemText, openingText, onText, 
     if (msg.goAway) { onStatus("time-up"); return; }
     const c = msg.serverContent;
     if (!c) return;
-    if (c.interrupted) stopPlayback(st);   // 学習者が話し始めたら、AIの声を止める
-    if (c.inputTranscription?.text) st.onText("me", c.inputTranscription.text, false);
+    if (c.interrupted) { stopPlayback(st); st.aiSpeaking = false; st.turnDone = true; st.onTurn("hearing"); }   // 学習者が話し始めたら、AIの声を止める
+    if (c.inputTranscription?.text) { st.onText("me", c.inputTranscription.text, false); if (!st.aiSpeaking) st.onTurn("hearing"); }
     if (c.outputTranscription?.text) st.onText("ai", c.outputTranscription.text, false);
-    for (const p of c.modelTurn?.parts || []) if (p.inlineData?.data) play(st, p.inlineData.data);
-    if (c.turnComplete) st.onText("ai", "", true);
+    for (const p of c.modelTurn?.parts || []) if (p.inlineData?.data) { st.turnDone = false; play(st, p.inlineData.data); }
+    if (c.turnComplete) {
+      st.onText("ai", "", true);
+      st.turnDone = true;
+      if (!st.sources.length) { st.aiSpeaking = false; st.onTurn("you"); }   // 声を流し終わっていれば、すぐ学習者の番
+    }
   };
   ws.onclose = e => {
     st.ready = false;
@@ -97,6 +105,8 @@ function onMic(st, f32) {
   const all = new Float32Array(st.pendingLen);
   let o = 0; for (const p of st.pending) { all.set(p, o); o += p.length; }
   st.pending = []; st.pendingLen = 0;
+  let sum = 0; for (let i = 0; i < all.length; i++) sum += all[i] * all[i];
+  st.onLevel(Math.min(1, Math.sqrt(sum / all.length) * 8));
   if (!st.ready || st.ws.readyState !== 1) return;
   const outLen = Math.floor(all.length * 16000 / rate);
   const pcm = new Int16Array(outLen);
@@ -127,7 +137,12 @@ function play(st, b64) {
   node.start(st.playAt);
   st.playAt += buf.duration;
   st.sources.push(node);
-  node.onended = () => { st.sources = st.sources.filter(s => s !== node); };
+  if (!st.aiSpeaking) { st.aiSpeaking = true; st.onTurn("ai"); }
+  node.onended = () => {
+    st.sources = st.sources.filter(s => s !== node);
+    // AIの発言が終わり、声も流し終わったら、学習者の番
+    if (!st.sources.length && st.turnDone && st.aiSpeaking) { st.aiSpeaking = false; st.onTurn("you"); }
+  };
 }
 
 function stopPlayback(st) {

@@ -61,6 +61,15 @@ label { display: block; }
 .note { font-size: 13px; color: var(--sub); }
 .drillentry { border-color: var(--accent); }
 .tag { display: inline-block; font-size: 12px; margin-left: 8px; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); vertical-align: middle; }
+.turn { border-radius: 14px; padding: 14px 16px; font-size: 19px; font-weight: 700; text-align: center; margin: 8px 0; transition: background .2s; }
+.turn .ja { font-weight: 400; }
+.turn.wait { background: #eceae4; color: var(--sub); }
+.turn.ai { background: #e3ebf7; color: #1d3f75; }
+.turn.you { background: #1f7a45; color: #fff; }
+.turn.you .ja { color: #d8f0e1; }
+.turn.hearing { background: #e3f3e8; color: #1f6b3d; }
+.meter { height: 8px; background: #e6e2d8; border-radius: 99px; overflow: hidden; margin-bottom: 8px; }
+.meter div { height: 100%; width: 0; background: #2f9e5c; transition: width .1s; }
 .model { padding-left: 22px; margin: 0; }
 .model li { padding: 8px 0; border-top: 1px solid var(--line); }
 .model li:first-child { border-top: none; }
