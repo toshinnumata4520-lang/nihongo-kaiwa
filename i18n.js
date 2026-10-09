@@ -1,4 +1,4 @@
-import { EXTRA } from "./lang_extra.js?v=202610092339";
+import { EXTRA } from "./lang_extra.js?v=202610092349";
 // 画面の言葉。日本語は「やさしい日本語」。ベトナム語は仮訳（教材担当の確認待ち）。
 const T = {
   appName:      { ja: "しごとの日本語れんしゅう", en: "Work Japanese Practice", vi: "Luyện tiếng Nhật công việc" },

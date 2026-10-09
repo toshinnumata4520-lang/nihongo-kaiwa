@@ -1,15 +1,15 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610092339";
-import { SCENES } from "./scenes.js?v=202610092339";
-import { SITUATIONS } from "./situations.js?v=202610092339";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610092339";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610092339";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610092339";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610092339";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610092339";
-import { EXAMS } from "./exams.js?v=202610092339";
-import { RUBY } from "./ruby.js?v=202610092339";
-import * as S from "./store.js?v=202610092339";
-import { autoSetup, preloadGis } from "./setup.js?v=202610092339";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610092349";
+import { SCENES } from "./scenes.js?v=202610092349";
+import { SITUATIONS } from "./situations.js?v=202610092349";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610092349";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610092349";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610092349";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610092349";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610092349";
+import { EXAMS } from "./exams.js?v=202610092349";
+import { RUBY } from "./ruby.js?v=202610092349";
+import * as S from "./store.js?v=202610092349";
+import { autoSetup, preloadGis } from "./setup.js?v=202610092349";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
