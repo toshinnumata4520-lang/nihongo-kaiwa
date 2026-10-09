@@ -53,6 +53,30 @@ ${lines || "（会話なし）"}
   return generate(key, prompt, schema);
 }
 
+// 自然な日本人の声で読み上げる（GeminiのTTS）。話し方（早口・関西弁など）も言葉で指定する。
+// 返り値は再生用の { pcm: Int16Array, rate } か WAV の ArrayBuffer
+export const TTS_MODEL = "gemini-3.8-flash-lite-tts";
+export async function tts(key, text, style, voice) {
+  const res = await fetch(`${URL_BASE}/${TTS_MODEL}:generateContent?key=${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ role: "user", parts: [{ text: style ? `${style}：${text}` : text }] }],
+      generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice || "Kore" } } } },
+    }),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  const data = await res.json();
+  const part = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+  if (!part) throw new Error("no audio");
+  const bin = atob(part.inlineData.data), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const mime = part.inlineData.mimeType || "";
+  const rate = +(mime.match(/rate=(\d+)/)?.[1] || 24000);
+  const isWav = bin.slice(0, 4) === "RIFF";
+  return { bytes, rate, isWav };
+}
+
 // 会話の手助け（段階）の材料：「やること」1つずつに、全文・骨組み・キーワード・まちがいの選択肢を作る
 export function makeScaffold(key, scene, situation, lang) {
   const prompt = `外国人の日本語学習者（目安 ${scene.level}）が、次のロールプレイで言う文の練習材料を作ってください。

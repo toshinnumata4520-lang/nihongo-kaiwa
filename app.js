@@ -3,7 +3,7 @@ import { SCENES } from "./scenes.js";
 import { SITUATIONS } from "./situations.js";
 import { SAFETY_RULES, mask } from "./safety.js";
 import { startConversation, stopConversation, sendNote, LIVE_MODEL } from "./live.js";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, TEXT_MODEL } from "./coach.js";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js";
 import { DRILLS, DRILL_INDUSTRIES } from "./drills.js";
 import { EXAMS } from "./exams.js";
 import * as S from "./store.js";
@@ -455,10 +455,47 @@ function speak(text, rate) {
   speechSynthesis.speak(u);
 }
 
+// 指示はAIの自然な声で流す（スマホの読み上げは機械的で、現場の話し方の練習にならないため）。
+// 一度作った声は使い回す。作れないときだけスマホの読み上げにする
+const STYLE_PROMPT = {
+  "早口": "職場で忙しくしている人が、少し早口で自然に言う",
+  "関西弁": "関西の人が、関西弁のイントネーションで自然に言う",
+  "方言": "地方のおばあさんが、方言まじりにゆっくり言う",
+  "略語": "忙しい飲食店の店長が、早口でぶっきらぼうに言う",
+  "あいまい": "忙しそうな人が、軽い口調でさらっと言う",
+  "電話": "電話の向こうのお客様が、ていねいに言う",
+  "現場のことば": "建設現場の職長が、大きな声ではっきり言う",
+};
+const audioCache = new Map();
+let drillCtx = null;
+async function playVoice(d, slow) {
+  const ck = d.id + (slow ? ":slow" : "");
+  try {
+    if (!S.getKey()) throw new Error("no key");
+    drillCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    await drillCtx.resume();
+    if (!audioCache.has(ck)) {
+      const style = slow ? "外国人にもわかるように、とてもゆっくり、はっきり言う" : STYLE_PROMPT[d.style];
+      const a = await tts(S.getKey(), d.say, style, d.voice);
+      let buf;
+      if (a.isWav) buf = await drillCtx.decodeAudioData(a.bytes.buffer.slice(0));
+      else {
+        const n = a.bytes.length >> 1; buf = drillCtx.createBuffer(1, n, a.rate);
+        const ch = buf.getChannelData(0), dv = new DataView(a.bytes.buffer);
+        for (let i = 0; i < n; i++) ch[i] = dv.getInt16(i * 2, true) / 0x8000;
+      }
+      audioCache.set(ck, buf);
+    }
+    const src = drillCtx.createBufferSource(); src.buffer = audioCache.get(ck); src.connect(drillCtx.destination); src.start();
+  } catch (e) {
+    console.warn("TTS fallback", e);
+    speak(d.say, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
+  }
+}
+
 function renderDrill(list, i) {
   if (i >= list.length) { renderHome(); return; }
   const d = list[i];
-  const rate = d.style === "早口" || d.style === "略語" ? 1.3 : 1.1;   // 現場の速さに近づける
   const log = { replays: 0, slow: 0, revealed: false };
   show(`
     <button class="back link">← ${esc(t("home"))}</button>
@@ -477,10 +514,10 @@ function renderDrill(list, i) {
     <form id="typeForm" class="row"><input id="typeBox" placeholder="${esc(t("typeHere"))}"><button class="sub">${esc(t("send"))}</button></form>
     <div id="res"></div>`);
   $app.querySelector(".back").onclick = renderHome;
-  document.getElementById("play").onclick = () => { log.replays++; speak(d.say, rate); };
-  document.getElementById("slow").onclick = () => { log.slow++; speak(d.say, 0.75); };
+  document.getElementById("play").onclick = () => { log.replays++; playVoice(d, false); };
+  document.getElementById("slow").onclick = () => { log.slow++; playVoice(d, true); };
   document.getElementById("reveal").ontoggle = e => { if (e.target.open) log.revealed = true; };
-  setTimeout(() => { log.replays++; speak(d.say, rate); }, 400);   // 最初に1回、自動で流す
+  log.replays++; playVoice(d, false);   // 最初に1回、自動で流す
   const $res = document.getElementById("res");
   const judge = async said => {
     if (!said) { $res.innerHTML = `<p class="status">${esc(t("notHeard"))}</p>`; return; }
