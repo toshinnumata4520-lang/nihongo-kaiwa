@@ -32,7 +32,7 @@ function show(html) {
 const sayCache = new Map();
 let sayCtx = null;
 async function say(text) {
-  if (S.getKey()) {
+  if (S.getKey() && !ttsBroken) {
     try {
       sayCtx ||= new (window.AudioContext || window.webkitAudioContext)();
       await sayCtx.resume();
@@ -49,7 +49,7 @@ async function say(text) {
       }
       const src = sayCtx.createBufferSource(); src.buffer = sayCache.get(text); src.connect(sayCtx.destination); src.start();
       return;
-    } catch (e) { console.warn("TTS fallback", e); }
+    } catch (e) { console.warn("TTS fallback", e); ttsBroken = true; return; }   // 次に押したときからスマホの読み上げ
   }
   sayLocal(text);
 }
@@ -505,10 +505,16 @@ const STYLE_PROMPT = {
 };
 const audioCache = new Map();
 let drillCtx = null;
+// AIの声が作れなかったら、以後はスマホの読み上げを「ボタンを押したその場で」使う
+// （iPhoneは、押した直後でないと読み上げが鳴らないため、待ってから代わりに鳴らすことはできない）
+let ttsBroken = false;
 async function playVoice(d, slow) {
   const ck = d.id + (slow ? ":slow" : "");
+  const local = () => speak(d.say_kana || d.say, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
+  if (ttsBroken || !S.getKey()) { local(); return; }
+  const $st = document.getElementById("voiceStatus");
   try {
-    if (!S.getKey()) throw new Error("no key");
+    if (!audioCache.has(ck) && $st) $st.textContent = t("voiceLoading");
     drillCtx ||= new (window.AudioContext || window.webkitAudioContext)();
     await drillCtx.resume();
     if (!audioCache.has(ck)) {
@@ -524,9 +530,11 @@ async function playVoice(d, slow) {
       audioCache.set(ck, buf);
     }
     const src = drillCtx.createBufferSource(); src.buffer = audioCache.get(ck); src.connect(drillCtx.destination); src.start();
+    if ($st) $st.textContent = "";
   } catch (e) {
     console.warn("TTS fallback", e);
-    speak(d.say_kana || d.say, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
+    ttsBroken = true;
+    if ($st) $st.textContent = t("voiceRetry") + `（${String(e.message).slice(0, 80)}）`;
   }
 }
 
@@ -544,6 +552,7 @@ function renderDrill(list, i) {
         <button id="play" class="primary">▶ ${esc(t("listen"))}</button>
         <button id="slow" class="sub">🐢 ${esc(t("listenSlow"))}</button>
       </div>
+      <p id="voiceStatus" class="note"></p>
       <details id="reveal"><summary class="note">${esc(t("showText"))}</summary><p class="big">${esc(d.say)}</p></details>
       <p class="note">💡 ${esc(t("askTip"))}</p>
     </section>

@@ -56,25 +56,29 @@ ${lines || "（会話なし）"}
 // 自然な日本人の声で読み上げる（GeminiのTTS）。話し方（早口・関西弁など）も言葉で指定する。
 // 返り値は再生用の { pcm: Int16Array, rate } か WAV の ArrayBuffer
 export const TTS_MODEL = "gemini-3.8-flash-lite-tts";
+// 3.8 の TTS は Interactions API（/v1beta/interactions）で呼ぶ。話し方は speech_metadata の style で指定する
 export async function tts(key, text, style, voice) {
-  const res = await fetch(`${URL_BASE}/${TTS_MODEL}:generateContent?key=${encodeURIComponent(key)}`, {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/interactions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: style ? `${style}：${text}` : text }] }],
-      generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice || "Kore" } } } },
+      model: TTS_MODEL,
+      input: [{ type: "user_input", content: [{ type: "text", text,
+        ...(style ? { annotations: [{ type: "speech_metadata", style }] } : {}) }] }],
+      response_format: { type: "audio", mime_type: "audio/wav", sample_rate: 24000 },
+      generation_config: { speech_config: [{ voice: voice || "Kore" }] },
     }),
   });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   const data = await res.json();
-  const part = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-  if (!part) throw new Error("no audio");
-  const bin = atob(part.inlineData.data), bytes = new Uint8Array(bin.length);
+  // 音声は steps[].content[].data（model_output の audio）にある
+  let b64 = null;
+  for (const st of data.steps || []) for (const c of st.content || []) if (c.data && (c.type === "audio" || /audio/.test(c.mime_type || ""))) b64 = c.data;
+  b64 ||= data.output_audio?.data;
+  if (!b64) throw new Error("no audio: " + JSON.stringify(data).slice(0, 300));
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const mime = part.inlineData.mimeType || "";
-  const rate = +(mime.match(/rate=(\d+)/)?.[1] || 24000);
-  const isWav = bin.slice(0, 4) === "RIFF";
-  return { bytes, rate, isWav };
+  return { bytes, rate: 24000, isWav: bin.slice(0, 4) === "RIFF" };
 }
 
 // 会話の手助け（段階）の材料：「やること」1つずつに、全文・骨組み・キーワード・まちがいの選択肢を作る
