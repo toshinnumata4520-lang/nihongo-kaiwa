@@ -4,6 +4,7 @@ import { SAFETY_RULES, mask } from "./safety.js";
 import { startConversation, stopConversation, sendNote, LIVE_MODEL } from "./live.js";
 import { makeFeedback, judgeRetry, TEXT_MODEL } from "./coach.js";
 import * as S from "./store.js";
+import { autoSetup, preloadGis } from "./setup.js";
 
 const CONSENT_VERSION = "trial-2026-10-v1";
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -63,7 +64,7 @@ function renderSetup() {
   [age18, agree].forEach(e => e.onchange = chk); nick.oninput = chk;
   document.getElementById("go").onclick = () => {
     S.setProfile({ nickname: nick.value.trim(), lang: L(), consent: { version: CONSENT_VERSION, at: new Date().toISOString(), age18: true } });
-    renderHome();
+    if (S.getKey()) renderHome(); else renderSettings();   // キーがまだなら、先にかんたん設定へ
   };
 }
 
@@ -362,10 +363,16 @@ function renderSettings() {
   show(`
     <button class="back link">← ${esc(t("home"))}</button>
     <h1>${esc(t("settings"))}</h1>
-    <section class="card">
-      <label>${esc(t("devKey"))}<input id="key" type="password" value="${esc(S.getKey())}" autocomplete="off"></label>
+    <section class="card ${S.getKey() ? "" : "goal"}">
+      <h2>${esc(t("easySetup"))}</h2>
+      <p class="note">${esc(t(S.getKey() ? "keyReady" : "easySetupNote"))}</p>
+      <button id="auto" class="primary">🔑 ${esc(t("easySetupBtn"))}</button>
+      <p id="autoStatus" class="status"></p>
+      <details><summary class="note">${esc(t("manualKey"))}</summary>
+        <label>${esc(t("devKey"))}<input id="key" type="password" value="${esc(S.getKey())}" autocomplete="off"></label>
+        <button id="saveKey" class="sub">${esc(t("save"))}</button>
+      </details>
       <p class="note">${esc(t("devKeyNote"))}</p>
-      <button id="saveKey" class="sub">${esc(t("save"))}</button>
     </section>
     <section class="card">
       <h2>${esc(t("records"))}</h2>
@@ -384,6 +391,21 @@ function renderSettings() {
   $app.querySelector(".back").onclick = renderHome;
   $app.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => { setLang(b.dataset.lang); renderSettings(); });
   document.getElementById("saveKey").onclick = () => { S.setKey(document.getElementById("key").value); alert("OK"); };
+  document.getElementById("auto").onclick = async () => {
+    preloadGis();   // iPhone でログイン画面を開けるよう、押した直後に読み込みを始める
+    const $s = document.getElementById("autoStatus"), btn = document.getElementById("auto");
+    btn.disabled = true;
+    try {
+      const key = await autoSetup({ model: TEXT_MODEL, onStep: m => { $s.textContent = m; $s.classList.remove("err"); } });
+      S.setKey(key);
+      $s.textContent = "✅ " + t("keyReady");
+      setTimeout(renderHome, 1200);
+    } catch (e) {
+      console.error(e);
+      $s.textContent = e.message; $s.classList.add("err");
+      btn.disabled = false;
+    }
+  };
   document.getElementById("export").onclick = () => {
     const blob = new Blob([JSON.stringify(S.getSessions(), null, 2)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `nihongo-kaiwa-records-${Date.now()}.json`; a.click();

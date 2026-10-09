@@ -71,6 +71,11 @@ const T = {
   goalShort:    { ja: "目標", en: "Goal", vi: "Mục tiêu" },
   export:       { ja: "きろくを ダウンロード", en: "Download records", vi: "Tải lịch sử" },
   deleteRecords:{ ja: "きろくを ぜんぶ けす", en: "Delete all records", vi: "Xóa toàn bộ lịch sử" },
+  easySetup:    { ja: "かんたん設定", en: "Easy setup", vi: "Cài đặt nhanh" },
+  easySetupNote:{ ja: "Googleで ログインすると、あなたの アカウントに 練習用の キーを 自動で 作ります（試験担当者 向け）", en: "Sign in with Google to create a practice key in your account automatically (for testers)", vi: "Đăng nhập Google để tự động tạo khóa luyện tập trong tài khoản của bạn (dành cho người thử nghiệm)" },
+  easySetupBtn: { ja: "Googleで かんたん設定", en: "Easy setup with Google", vi: "Cài đặt nhanh bằng Google" },
+  keyReady:     { ja: "キーの 設定は できています", en: "Your key is set up", vi: "Đã cài đặt khóa" },
+  manualKey:    { ja: "キーを 手で 入れる", en: "Enter a key manually", vi: "Nhập khóa thủ công" },
   deleteConfirm:{ ja: "きろくを ぜんぶ けします。いいですか？", en: "Delete all records?", vi: "Xóa toàn bộ lịch sử?" },
 };
 

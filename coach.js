@@ -1,7 +1,7 @@
 // 文字のAI（Flash-Lite）でやること：会話のあとの「直し」と、言い直しの判定。
 // 声の会話より原価がずっと安いので、準備・直し・復習は文字で行う。
 
-export const TEXT_MODEL = "gemini-flash-lite-latest";
+export const TEXT_MODEL = "gemini-3.5-flash-lite";
 const URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 async function generate(key, prompt, schema) {
