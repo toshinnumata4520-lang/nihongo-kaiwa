@@ -1,0 +1,103 @@
+// 場面データ。教材担当の作成（ベトナム語は母語話者の確認待ち）。
+// title / goal の en・vi は開発側で仮に付けたもの。
+export const SCENES = [
+  {
+    id: "work_late_call_01",
+    industry: "共通",
+    title_ja: "職場：遅刻の連絡（上司に電話）",
+    title_furigana: "しょくば：ちこくのれんらく（じょうしにでんわ）",
+    title: { en: "Work: Calling your boss to say you'll be late", vi: "Công việc: Gọi điện báo cấp trên sẽ đến muộn" },
+    level: "N4",
+    goal_ja: "上司に電話で、遅れる理由と着く時間を伝えて、きちんと謝ることができる。",
+    goal: { en: "Tell your boss by phone why you'll be late and when you'll arrive, and apologize properly.", vi: "Gọi điện báo cấp trên lý do đến muộn, giờ sẽ đến và xin lỗi đúng cách." },
+    goal_check: [
+      "自分の名前を言い、遅れることとその理由（電車の遅れ、寝坊など）を伝えた",
+      "着く時間の目安（「〇時ごろ」「〇分ぐらい遅れる」）を言った",
+      "謝ることば（「申し訳ありません」「すみません」「ご迷惑をおかけします」など）を1回以上使った",
+    ],
+    ai_role: "職場の上司・田中さん（40代男性、現場リーダー）。朝の準備で少し忙しいが、親切で怒らない。「です・ます」の丁寧語で、ふつうよりほんの少しゆっくり話す。尊敬語は使わない。学習者が着く時間を言わなければ「何時ごろ着きそうですか」、理由を言わなければ「どうしましたか」と聞く。最後は「わかりました。気をつけて来てください」と言って電話を終える。",
+    opening_line: "はい、さくら食品、田中です。",
+    key_phrases: [
+      { ja: "申し訳ありません。電車が遅れていて、30分ぐらい遅れます。", furigana: "もうしわけありません。でんしゃがおくれていて、さんじゅっぷんぐらいおくれます。", romaji: "Mōshiwake arimasen. Densha ga okurete ite, sanjuppun gurai okuremasu.", en: "I'm very sorry. The train is delayed, so I'll be about 30 minutes late.", vi: "Tôi thành thật xin lỗi. Tàu điện bị trễ nên tôi sẽ đến muộn khoảng 30 phút." },
+      { ja: "9時半ごろには着くと思います。", furigana: "くじはんごろにはつくとおもいます。", romaji: "Kuji-han goro ni wa tsuku to omoimasu.", en: "I think I'll arrive by around 9:30.", vi: "Tôi nghĩ khoảng 9 giờ rưỡi tôi sẽ đến nơi." },
+      { ja: "ご迷惑をおかけして、すみません。", furigana: "ごめいわくをおかけして、すみません。", romaji: "Go-meiwaku o okake shite, sumimasen.", en: "I'm sorry for the trouble.", vi: "Xin lỗi vì đã gây phiền phức cho anh/chị." },
+    ],
+    hints: [
+      "さいしょに 名前を 言いましょう。「おはようございます。〇〇です。」",
+      "どうして おくれるか 言いましょう。「電車が おくれていて…」",
+      "何時に つくか 言いましょう。「9時半ごろ つくと 思います。」",
+    ],
+    common_errors: [
+      { wrong: "すみません、遅れました。", right: "すみません、遅れます。／遅れそうです。", point: "まだ着いていないので、過去形（遅れました）ではなく「遅れます」を使う。" },
+      { wrong: "電車が遅れたから、遅れます。", right: "電車が遅れていて、遅れます。", point: "「から」は言い訳に聞こえやすい。仕事の連絡では「〜ていて」「〜ので」を使う。" },
+      { wrong: "遅刻です。", right: "〇〇です。申し訳ありません、今日30分ぐらい遅れます。", point: "名前・遅れる時間・謝ることばをセットで言う。" },
+    ],
+    safety_note: "事故やけが、急病で遅れる設定になったときは「まず自分の安全を守ってください。けがのときは119に電話してください」と伝え、遅刻の連絡の練習に戻る。就業規則（給料が減るか、処分など）について判断や助言をしない。本当の会社名、上司の名前、電話番号は言わせない。",
+  },
+  {
+    id: "life_konbini_pay_01",
+    industry: "生活",
+    title_ja: "コンビニ：支払いと温め・袋",
+    title_furigana: "こんびに：しはらいとあたため・ふくろ",
+    title: { en: "Convenience store: heating, bag and payment", vi: "Cửa hàng tiện lợi: hâm nóng, túi và thanh toán" },
+    level: "N4",
+    goal_ja: "コンビニのレジで、温め・袋・支払い方法についての店員の質問に答えて、買い物を最後まで終えることができる。",
+    goal: { en: "Answer the clerk's questions about heating, a bag and payment, and finish your shopping.", vi: "Trả lời câu hỏi của nhân viên về hâm nóng, túi và cách thanh toán, rồi mua hàng xong." },
+    goal_check: [
+      "温めるかどうかの質問に、はっきり答えた（「お願いします」「そのままでいいです」など）",
+      "袋がいるかどうかを、はっきり伝えた",
+      "支払い方法（現金・カード・スマホ決済）を伝えたか、使えるかどうかを質問した",
+    ],
+    ai_role: "コンビニの店員（20代のアルバイト、明るくて親切）。レジの決まった接客ことば（「〜でよろしいですか」「お預かりします」「〜はおつけしますか」）を、ふつうの速さで言う。質問は1つずつする。順番は、温め → お箸・スプーン → 袋 → 支払い方法 → ポイントカード → 金額。学習者が聞き取れずに黙ったり聞き返したりしたら、同じ内容をやさしいことばで、ゆっくり言い直す（例:「袋、いりますか」）。",
+    opening_line: "いらっしゃいませ。こちらのお弁当、温めますか。",
+    key_phrases: [
+      { ja: "はい、温めてください。", furigana: "はい、あたためてください。", romaji: "Hai, atatamete kudasai.", en: "Yes, please heat it up.", vi: "Vâng, làm nóng giúp tôi." },
+      { ja: "袋はいりません。", furigana: "ふくろはいりません。", romaji: "Fukuro wa irimasen.", en: "I don't need a bag.", vi: "Tôi không cần túi." },
+      { ja: "カードで払えますか。", furigana: "かーどではらえますか。", romaji: "Kādo de haraemasu ka.", en: "Can I pay by card?", vi: "Tôi có thể trả bằng thẻ không?" },
+    ],
+    hints: [
+      "あたためて ほしいときは「はい、おねがいします」。いらないときは「いいえ、そのままで いいです」。",
+      "ふくろが いらないときは「ふくろは いりません」。ほしいときは「ふくろ、おねがいします」。",
+      "カードや スマホで はらいたいときは「カードで はらえますか」と 聞きましょう。",
+    ],
+    common_errors: [
+      { wrong: "（「温めますか」に）はい、温めます。", right: "はい、お願いします。／はい、温めてください。", point: "「温めます」は自分で温める意味になる。してほしいときは「お願いします」。" },
+      { wrong: "（「袋はご利用ですか」に）大丈夫です。", right: "袋はいりません。／袋、お願いします。", point: "「大丈夫です」はいるのか、いらないのか、わかりにくい。" },
+      { wrong: "カード、できますか。", right: "カードで払えますか。", point: "支払いでは「〜で払えますか」「〜は使えますか」を使う。" },
+    ],
+    safety_note: "本当のカード番号、暗証番号、決済アプリのID、ポイントカードの番号は言わせない（言い始めたら止める）。特定の決済サービスや店をすすめない。食物アレルギーの質問が出たら「商品のラベルを見るか、お店の人に確認してください」と言い、安全かどうかは判断しない。",
+  },
+  {
+    id: "life_hospital_reception_01",
+    industry: "生活",
+    title_ja: "病院の受付：初診で症状を伝える",
+    title_furigana: "びょういんのうけつけ：しょしんでしょうじょうをつたえる",
+    title: { en: "Clinic reception: first visit, describing symptoms", vi: "Lễ tân bệnh viện: khám lần đầu, nói triệu chứng" },
+    level: "N3",
+    goal_ja: "病院の受付で、初めて来たことを伝え、いつから・どこが・どんなふうに悪いかを説明できる。",
+    goal: { en: "At reception, say it's your first visit and explain since when, where and how you feel unwell.", vi: "Ở quầy lễ tân, nói đây là lần đầu đến và giải thích từ khi nào, chỗ nào, khó chịu thế nào." },
+    goal_check: [
+      "初めて来たこと（初診）を伝えた",
+      "症状を1つ以上と、いつから始まったかを言った（例:「きのうの夜から熱があります」）",
+      "具体的な情報（熱の温度、痛い場所、どのくらい痛いかなど）を1つ以上足したか、わからないときに聞き返した",
+    ],
+    ai_role: "クリニックの受付スタッフ（30代女性、落ち着いていて丁寧）。丁寧語に加えて、受付の決まった敬語（「保険証をお持ちですか」「こちらにご記入ください」「おかけになってお待ちください」）を使う。流れは、初診かどうかの確認 → 保険証（マイナ保険証または資格確認書）の確認 → 問診票の記入をお願いする → 症状を簡単に聞く（いつから・どこが・熱は何度か）→ 待つように案内する。AIは受付の役であり、医師・看護師ではない。症状について意見を言ったり、病名を言ったりしない。",
+    opening_line: "こんにちは。こちらは初めてですか。",
+    key_phrases: [
+      { ja: "初めてなんですが、診察をお願いできますか。", furigana: "はじめてなんですが、しんさつをおねがいできますか。", romaji: "Hajimete nan desu ga, shinsatsu o onegai dekimasu ka.", en: "This is my first time here. Could I see a doctor?", vi: "Đây là lần đầu tôi đến đây, tôi có thể được khám không ạ?" },
+      { ja: "きのうの夜から、熱があって、のどが痛いです。", furigana: "きのうのよるから、ねつがあって、のどがいたいです。", romaji: "Kinō no yoru kara, netsu ga atte, nodo ga itai desu.", en: "Since last night, I've had a fever and a sore throat.", vi: "Từ tối hôm qua tôi bị sốt và đau họng." },
+      { ja: "すみません、もう少しゆっくり話していただけますか。", furigana: "すみません、もうすこしゆっくりはなしていただけますか。", romaji: "Sumimasen, mō sukoshi yukkuri hanashite itadakemasu ka.", en: "Excuse me, could you speak a little more slowly?", vi: "Xin lỗi, anh/chị có thể nói chậm hơn một chút được không ạ?" },
+    ],
+    hints: [
+      "はじめての 病院では「はじめてです」と 言いましょう。",
+      "「いつから」「どこが」「どんなふうに」を 言いましょう。例：「きのうから のどが いたいです。」",
+      "わからないときは「もう一度 おねがいします」「ゆっくり おねがいします」と 言って いいです。",
+    ],
+    common_errors: [
+      { wrong: "頭が痛いがあります。", right: "頭が痛いです。／頭痛があります。", point: "「痛い」は形容詞なので「〜があります」とは言わない。" },
+      { wrong: "熱です。", right: "熱があります。／38度あります。", point: "熱は「あります」で言う。何度あるかを言うともっと伝わる。" },
+      { wrong: "きのうから、のどが痛かったです。", right: "きのうから、のどが痛いです。", point: "今も痛いときは現在形。「痛かったです」はもう治ったように聞こえる。" },
+    ],
+    safety_note: "医療の助言をしない。診断、病名の推測、薬の名前・飲み方、受診すべきかの判断は絶対にしない。症状は架空のものとし、本当の病歴・保険証の番号・マイナンバーは言わせない。学習者が本当の強い症状（胸が痛い、息が苦しい、ひどいけがなど）を話したり、本当に困っている様子なら、ロールプレイを止めて「本当に具合が悪いときは、すぐに119に電話してください。迷うときは#7119（ない地域もあります）に相談できます。」と伝える。",
+  },
+];
