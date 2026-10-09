@@ -28,8 +28,32 @@ function show(html) {
   $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
 }
 
-// お手本の声（ブラウザの読み上げ。端末の中で読み上げるだけで、外には送らない）
-function say(text) {
+// お手本の声。キーがあればAIの自然な声（一度作った声は使い回す）、なければスマホの読み上げ
+const sayCache = new Map();
+let sayCtx = null;
+async function say(text) {
+  if (S.getKey()) {
+    try {
+      sayCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+      await sayCtx.resume();
+      if (!sayCache.has(text)) {
+        const a = await tts(S.getKey(), text, "日本語の先生が、はっきり自然に言う", "Kore");
+        let buf;
+        if (a.isWav) buf = await sayCtx.decodeAudioData(a.bytes.buffer.slice(0));
+        else {
+          const n = a.bytes.length >> 1; buf = sayCtx.createBuffer(1, n, a.rate);
+          const ch = buf.getChannelData(0), dv = new DataView(a.bytes.buffer);
+          for (let i = 0; i < n; i++) ch[i] = dv.getInt16(i * 2, true) / 0x8000;
+        }
+        sayCache.set(text, buf);
+      }
+      const src = sayCtx.createBufferSource(); src.buffer = sayCache.get(text); src.connect(sayCtx.destination); src.start();
+      return;
+    } catch (e) { console.warn("TTS fallback", e); }
+  }
+  sayLocal(text);
+}
+function sayLocal(text) {
   if (!window.speechSynthesis) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; u.rate = 0.85;
@@ -88,7 +112,9 @@ function renderHome() {
     </section>
     <section class="card">
       <h2>📝 ${bi("examTitle")}</h2>
-      <div class="row">${EXAM_SETS.map((s, i) => `<button class="choice" data-exam="${i}">${esc(s.name)}</button>`).join("")}</div>
+      <div class="row">${EXAM_SETS.map((s, i) => s.group ? "" : `<button class="choice" data-exam="${i}">${esc(s.name)}</button>`).join("")}</div>
+      <p class="note">${esc(t("examGroup2"))}</p>
+      <div class="row">${EXAM_SETS.map((s, i) => s.group ? `<button class="choice" data-exam="${i}">${esc(s.name)}</button>` : "").join("")}</div>
       <p class="note">${esc(t("examNote"))}</p>
     </section>
     <h2>${bi("scenes")}</h2>
@@ -565,13 +591,22 @@ function renderDrill(list, i) {
 const EXAM_SETS = [
   { name: "JLPT N4", filter: q => q.exam === "JLPT-N4" },
   { name: "JLPT N3", filter: q => q.exam === "JLPT-N3" },
+  { name: "JLPT N2", filter: q => q.exam === "JLPT-N2" },
   { name: "JFT-Basic", filter: q => q.exam === "JFT-Basic" && !q.script },
   { name: "JFT-Basic 聴解", filter: q => q.exam === "JFT-Basic" && !!q.script },
+  ...["外食2号", "建設2号", "介護福祉士"].flatMap(f => [
+    { name: `一問一答 ${f}`, group: 2, filter: q => q.exam === `一問一答 ${f}` },
+    { name: `用語カード ${f}`, group: 2, filter: q => q.exam === `用語カード ${f}` },
+  ]),
 ];
 const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
 
 // 「漢字(よみ)」をふりがな付きの表示に、【語】を下線にする
 function examText(q) {
+  // ふりがなが「全文ひらがな」の問題（一問一答）は、漢字の文の下に、ひらがなの行をそえる
+  if (S.getFurigana() && q.question_furigana && !/\([ぁ-ん]/.test(q.question_furigana) && q.question_furigana !== q.question_ja)
+    return esc(q.question_ja).replace(/【(.+?)】/g, "<u>$1</u>").replace(/\n/g, "<br>") +
+      `<span class="furi">${esc(q.question_furigana.split("\n").slice(1).join(" "))}</span>`;
   const raw = S.getFurigana() ? q.question_furigana : q.question_ja;
   let h = esc(raw).replace(/【(.+?)】/g, "<u>$1</u>");
   if (S.getFurigana()) h = h.replace(/([一-龯々〆ヶ]+)\(([ぁ-んー]+)\)/g, "<ruby>$1<rt>$2</rt></ruby>");
@@ -594,7 +629,9 @@ function playScript(script) {
 
 function startExam(set) {
   const qs = shuffle(EXAMS.filter(set.filter)).slice(0, 10).map(q => {
-    const order = shuffle([0, 1, 2, 3]);   // 正解の位置が偏らないよう、選択肢を毎回並べかえる
+    if (!q.choices) return q;   // こたえを見て自分で〇つけする問題（短答・用語カード）
+    // 4択は正解の位置が偏らないよう毎回並べかえる。○×はそのまま
+    const order = q.choices.length > 2 ? shuffle(q.choices.map((_, i) => i)) : q.choices.map((_, i) => i);
     return { ...q, choicesShown: order.map(i => q.choices[i]), answerShown: order.indexOf(q.answer_index) };
   });
   renderExamQ(set, qs, 0, []);
@@ -610,9 +647,26 @@ function renderExamQ(set, qs, i, results) {
       <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${esc(t("furigana"))}</label></div>
     <p class="note">${esc(q.section)}</p>
     ${q.script ? `<button id="play" class="primary">▶ ${esc(t("listen"))}（${esc(t("upTo2"))}）</button>` : ""}
-    <section class="card"><p class="big exq">${examText(q)}</p></section>
-    <div class="answers">${q.choicesShown.map((c, k) => `<button class="ans" data-k="${k}">${k + 1}. ${esc(c)}</button>`).join("")}</div>
+    <section class="card"><p class="big exq">${examText(q)}</p>${q.say ? sayBtn(q.say) : ""}</section>
+    ${q.choicesShown
+      ? `<div class="answers ${q.choicesShown.length === 2 ? "ox" : ""}">${q.choicesShown.map((c, k) => `<button class="ans" data-k="${k}">${q.choicesShown.length > 2 ? k + 1 + ". " : ""}${esc(c)}</button>`).join("")}</div>`
+      : `<button id="reveal" class="primary">${esc(t("showAnswer"))}</button>`}
     <div id="res"></div>`);
+  $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
+  // こたえを見て自分で〇つけする問題
+  const $rev = document.getElementById("reveal");
+  if ($rev) $rev.onclick = () => {
+    $rev.remove();
+    const ex = L() === "ja" ? "" : q[`explain_${L()}`] || q.explain_en;
+    const $r = document.getElementById("res");
+    $r.innerHTML = `<section class="card"><p class="big"><b>${esc(q.answer_text)}</b></p>
+        ${ex ? `<p>${esc(ex)}</p>` : ""}<p class="note">${esc(q.explain_ja)}</p></section>
+      <div class="row"><button id="selfok" class="sub">✅ ${esc(t("gotIt"))}</button><button id="selfng" class="sub">🔁 ${esc(t("notYet"))}</button></div>`;
+    $r.scrollIntoView({ behavior: "smooth", block: "start" });
+    const go = ok => { results.push({ id: q.id, ok }); renderExamQ(set, qs, i + 1, results); };
+    document.getElementById("selfok").onclick = () => go(true);
+    document.getElementById("selfng").onclick = () => go(false);
+  };
   $app.querySelector(".back").onclick = renderHome;
   document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderExamQ(set, qs, i, results); };
   const $play = document.getElementById("play");
@@ -631,6 +685,7 @@ function renderExamQ(set, qs, i, results) {
       </section>
       <button id="next" class="primary">${esc(t("next"))} →</button>`;
     document.getElementById("next").onclick = () => renderExamQ(set, qs, i + 1, results);
+    document.getElementById("res").scrollIntoView({ behavior: "smooth", block: "start" });   // 解説と「つぎへ」が見えるように
   });
 }
 

@@ -89,6 +89,8 @@ label { display: block; }
 .opt.wrong { background: #fdecea; border-color: var(--err); }
 .chip { display: inline-block; background: var(--accent-soft); color: var(--accent); border-radius: 99px; padding: 2px 10px; margin: 2px 4px 2px 0; font-weight: 700; }
 .answers { display: grid; gap: 8px; }
+.answers.ox { grid-template-columns: 1fr 1fr; }
+.answers.ox .ans { text-align: center; font-size: 34px; padding: 16px; }
 .ans { text-align: left; font-size: 18px; padding: 12px 14px; }
 .ans.right { background: var(--ok-soft); border-color: var(--ok); }
 .ans.wrong { background: #fdecea; border-color: var(--err); }
