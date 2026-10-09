@@ -151,3 +151,16 @@ comment はやさしい日本語で20字以内。`;
   const schema = { type: "OBJECT", properties: { ok: { type: "BOOLEAN" }, comment: { type: "STRING" } }, required: ["ok", "comment"] };
   return generate(key, prompt, schema);
 }
+
+// 会話中の「やること」のチェック：ここまでの会話で、学習者がそれぞれ言えたか（AIの番が終わるたびに呼ぶ。安い文字のAIで行う）
+export function judgeTodo(key, todos, transcript) {
+  const lines = transcript.map(m => `${m.who === "me" ? "学習者" : "相手"}: ${m.text}`).join("\n");
+  const prompt = `日本語の会話練習です。学習者が「やること」を言えたかを判定してください。
+やること:
+${todos.map((x, i) => `${i + 1}. ${x}`).join("\n")}
+会話（音声の文字起こし。誤認識を含む）:
+${lines}
+- done: やることと同じ順・同じ数で、学習者がその内容をはっきり言えていれば true（相手が言っただけ、途中までは false）`;
+  const schema = { type: "OBJECT", properties: { done: { type: "ARRAY", items: { type: "BOOLEAN" } } }, required: ["done"] };
+  return generate(key, prompt, schema);
+}

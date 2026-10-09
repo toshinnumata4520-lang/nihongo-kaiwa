@@ -1,14 +1,14 @@
-import { t, tja, getLang, setLang } from "./i18n.js?v=202610091536";
-import { SCENES } from "./scenes.js?v=202610091536";
-import { SITUATIONS } from "./situations.js?v=202610091536";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610091536";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610091536";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js?v=202610091536";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610091536";
-import { EXAMS } from "./exams.js?v=202610091536";
-import { RUBY } from "./ruby.js?v=202610091536";
-import * as S from "./store.js?v=202610091536";
-import { autoSetup, preloadGis } from "./setup.js?v=202610091536";
+import { t, tja, getLang, setLang } from "./i18n.js?v=202610092323";
+import { SCENES } from "./scenes.js?v=202610092323";
+import { SITUATIONS } from "./situations.js?v=202610092323";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610092323";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610092323";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610092323";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610092323";
+import { EXAMS } from "./exams.js?v=202610092323";
+import { RUBY } from "./ruby.js?v=202610092323";
+import * as S from "./store.js?v=202610092323";
+import { autoSetup, preloadGis } from "./setup.js?v=202610092323";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -434,6 +434,7 @@ ${s ? `学習者に見せている状況: ${s.you.ja} ${s.now.ja}
 - 先生として口をはさむのは、1回の発言につき1回だけ。場面から外れた指摘と日本語の直しが両方あてはまるときは、場面の指摘だけをする。
 - 小さな間違い（意味は通じる助詞のゆれ、少しくだけた言い方）は、手助けの段階が2・3のときは直さず、役のまま会話を続ける。
 - 文字起こしの誤認識らしいもの（意味は通じる言いよどみ・言い直し）は直さない。
+- 正しい敬語は直さない。「〜でございます」「2階にございます」「〜におります」「伺います」「かしこまりました」「少々お待ちください」などは、接客で正しい言い方なので、まちがいとして扱わない。
 
 # 読み方（発音をまちがえない）
 - この場面のお手本の文と、その読み方。この読み方で発音する：
@@ -506,6 +507,21 @@ function renderTalk(sc) {
     else if (level < 5) $support.innerHTML = `<p class="note">${tx("scafFailed")}</p>`;
   });
 
+  // 「やること」を言えたら ✅ を付ける（AIの番が終わるたびに確かめる。前の確認が終わるまでは重ねない）
+  const todos = SITUATIONS[sc.id]?.todo || [];
+  const todoDone = todos.map(() => false);
+  let todoBusy = false;
+  async function checkTodo() {
+    if (!todos.length || todoBusy || todoDone.every(Boolean) || !transcript.some(m => m.who === "me" && m.text.trim())) return;
+    todoBusy = true;
+    try {
+      const { result } = await judgeTodo(key, todos.map(x => x.ja), transcript.filter(m => m.text.trim()).map(m => ({ who: m.who, text: mask(m.text) })));
+      (result.done || []).forEach((d, i) => { if (d && i < todoDone.length) todoDone[i] = true; });   // 一度✅になったら消さない
+      document.querySelectorAll(".talk .todo li").forEach((li, i) => li.classList.toggle("done", !!todoDone[i]));
+    } catch (e) { console.warn("todo check", e); }
+    finally { todoBusy = false; }
+  }
+
   activeTalkFinish = finish;
   startConversation({
     key, systemText: systemFor(sc, level),
@@ -513,7 +529,7 @@ function renderTalk(sc) {
     onText: (who, text, done) => {
       if (finished) return;
       if (text) add(who, text);
-      if (done) { open.me = null; open.ai = null; }   // AIの発言が終わったら、どちらの発言も区切る
+      if (done) { open.me = null; open.ai = null; checkTodo(); }   // AIの発言が終わったら、どちらの発言も区切り、「やること」を確かめる
     },
     onStatus: (s, isErr, detail) => {
       if (finished) return;
@@ -616,24 +632,31 @@ async function renderFeedback(sc, transcript, seconds, liveUsage, isRetry = fals
     </section>
     <section class="card">
       <h2>${bi("oneFix")}</h2>
-      ${f.said ? `<p class="said">${tx("youSaid")}：${esc(f.said)}</p>` : ""}
-      <p class="better">${sayBtn(f.better, f.better_furigana)}${tx("better")}：<b>${esc(f.better)}</b></p>
-      ${S.getFurigana() ? `<p class="furi">${esc(f.better_furigana)}</p>` : ""}
-      <p class="why">${esc(why)}</p>
-      ${L() !== "ja" ? `<p class="ja">${esc(f.why_ja)}</p>` : ""}
+      ${f.said ? `<p class="said">${tx("youSaid")}：${esc(f.said)}</p>
+      <p class="think">🤔 ${bi("thinkFirst")}</p>
+      <button id="showFix" class="sub">👀 ${tx("showAnswer")}</button>` : ""}
+      <div id="fixBody" ${f.said ? "hidden" : ""}>
+        <p class="better">${sayBtn(f.better, f.better_furigana)}${tx("better")}：<b>${esc(f.better)}</b></p>
+        ${S.getFurigana() ? `<p class="furi">${esc(f.better_furigana)}</p>` : ""}
+        <p class="why">${esc(why)}</p>
+        ${L() !== "ja" ? `<p class="ja">${esc(f.why_ja)}</p>` : ""}
+      </div>
     </section>
-    ${(fb.model_lines || []).length ? `<section class="card">
-      <h2>${bi("correctJa")}</h2>
+    ${(fb.model_lines || []).length ? `<details class="card">
+      <summary><b>${bi("correctJa")}</b></summary>
       <ol class="model">${fb.model_lines.map(m => `<li>
         ${m.said ? `<span class="said">${tx("youSaid")}：${esc(m.said)}</span>` : `<span class="said">${tx("missing")}</span>`}
         <span class="jp">${sayBtn(m.correct, m.furigana)}${esc(m.correct)}</span>
         ${S.getFurigana() ? `<span class="furi">${esc(m.furigana)}</span>` : ""}
       </li>`).join("")}</ol>
-    </section>` : ""}
+    </details>` : ""}
     <button id="retry" class="primary big">🎙 ${bi("retry")}</button>
     <button id="home" class="link">${tx("home")}</button>`);
   document.getElementById("home").onclick = renderHome;
   document.getElementById("retry").onclick = () => renderRetry(sc, f);
+  // まず自分で考えてから、こたえを見る（すぐ答えを見せると、覚えにくいため）
+  const $sf = document.getElementById("showFix");
+  if ($sf) $sf.onclick = () => { $sf.remove(); document.getElementById("fixBody").hidden = false; document.querySelector(".think")?.remove(); };
 }
 
 // ───── 言い直し（ブラウザの音声認識。使えない端末では文字で入力） ─────

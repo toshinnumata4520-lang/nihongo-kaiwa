@@ -35,6 +35,7 @@ const T = {
   tabListen:    { ja: "聞く", en: "Listen", vi: "Nghe" },
   tabExam:      { ja: "試験", en: "Exams", vi: "Thi" },
   nextUp:       { ja: "つぎの おすすめ", en: "Up next", vi: "Bài tiếp theo" },
+  thinkFirst:   { ja: "もっと いい 言い方は ありますか？ まず 自分で 考えて みましょう", en: "Is there a better way to say it? Think first, then check", vi: "Có cách nói tốt hơn không? Hãy tự nghĩ trước rồi xem đáp án" },
   connLost:     { ja: "つながりが 切れました", en: "The connection was lost", vi: "Mất kết nối" },
   reconnect:    { ja: "もう一度 つなぐ", en: "Connect again", vi: "Kết nối lại" },
   startFailed:  { ja: "この ブラウザでは 会話を はじめられません。Safari か Chrome で ひらいて ください", en: "Couldn't start the conversation in this browser. Please open it in Safari or Chrome", vi: "Không bắt đầu được hội thoại trên trình duyệt này. Hãy mở bằng Safari hoặc Chrome" },
