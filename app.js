@@ -113,7 +113,7 @@ function renderHome() {
 function phraseHtml(p) {
   const furi = S.getFurigana();
   const tr = L() === "ja" ? p.en : p[L()] || p.en;
-  return `<li class="phrase">${sayBtn(p.ja)}<span class="jp">${esc(p.ja)}</span>
+  return `<li class="phrase">${sayBtn(p.furigana || p.ja)}<span class="jp">${esc(p.ja)}</span>
     ${furi ? `<span class="furi">${esc(p.furigana)}</span>` : ""}
     <span class="tr">${esc(tr)}</span></li>`;
 }
@@ -160,7 +160,7 @@ function supportHtml(scaf, level) {
     const body = level === 3 ? `<span class="jp">${esc(st.skeleton)}</span>`
       : `<span class="kw">${st.keywords.map(k => `<span class="chip">${esc(k)}</span>`).join("")}</span>`;
     return `<li>${body}<details><summary class="note">${esc(t("showAnswer"))}</summary>
-      <span class="jp">${sayBtn(st.full)}${esc(st.full)}</span>${S.getFurigana() ? `<span class="furi">${esc(st.furigana)}</span>` : ""}<span class="tr">${esc(st.meaning)}</span></details></li>`;
+      <span class="jp">${sayBtn(st.furigana || st.full)}${esc(st.full)}</span>${S.getFurigana() ? `<span class="furi">${esc(st.furigana)}</span>` : ""}<span class="tr">${esc(st.meaning)}</span></details></li>`;
   }).join("")}</ol></section>`;
 }
 
@@ -236,6 +236,12 @@ ${s ? `学習者に見せている状況: ${s.you.ja} ${s.now.ja}
 - 直し方：役をいったん止めて「（せんせい）『〇〇』ですね。もう一度 言ってみましょう。」と、正しい言い方を1つだけ短く言う。学習者が言い直したら「いいですね。」と言って、すぐ役に戻る。
 - 1回の発言で直すのは1つだけ。いちばん大事な間違いを選ぶ。言い直しがうまくいかなくても、2回目で役に戻る（責めない）。
 - 文字起こしの誤認識らしいもの（意味は通じる言いよどみ・言い直し）は直さない。
+
+# 読み方（発音をまちがえない）
+- この場面のお手本の文と、その読み方。この読み方で発音する：
+${sc.key_phrases.map(p => `  ${p.ja} → ${p.furigana}`).join("\n")}
+- まちがえやすい読み：薬＝くすり（「やく」ではない）、〇番＝〇ばん、〇卓＝〇たく、37度5分＝さんじゅうななどごぶ、9時半＝くじはん、10分＝じゅっぷん、1人＝ひとり、2人＝ふたり、〇日＝ついたち・ふつか・みっか…（日付は正しく）、何時＝なんじ、上手＝じょうず、下手＝へた、今日＝きょう、明日＝あした。
+- 読み方に自信がない漢字の言葉は、使わずに、やさしい言葉に言いかえる。
 
 # 今回の手助けの段階
 ${levelRule}
@@ -378,7 +384,7 @@ async function renderFeedback(sc, transcript, seconds, liveUsage) {
     <section class="card">
       <h2>${bi("oneFix")}</h2>
       ${f.said ? `<p class="said">${esc(t("youSaid"))}：${esc(f.said)}</p>` : ""}
-      <p class="better">${sayBtn(f.better)}${esc(t("better"))}：<b>${esc(f.better)}</b></p>
+      <p class="better">${sayBtn(f.better_furigana || f.better)}${esc(t("better"))}：<b>${esc(f.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(f.better_furigana)}</p>` : ""}
       <p class="why">${esc(why)}</p>
       ${L() !== "ja" ? `<p class="ja">${esc(f.why_ja)}</p>` : ""}
@@ -387,7 +393,7 @@ async function renderFeedback(sc, transcript, seconds, liveUsage) {
       <h2>${bi("correctJa")}</h2>
       <ol class="model">${fb.model_lines.map(m => `<li>
         ${m.said ? `<span class="said">${esc(t("youSaid"))}：${esc(m.said)}</span>` : `<span class="said">${esc(t("missing"))}</span>`}
-        <span class="jp">${sayBtn(m.correct)}${esc(m.correct)}</span>
+        <span class="jp">${sayBtn(m.furigana || m.correct)}${esc(m.correct)}</span>
         ${S.getFurigana() ? `<span class="furi">${esc(m.furigana)}</span>` : ""}
       </li>`).join("")}</ol>
     </section>` : ""}
@@ -417,7 +423,7 @@ function renderRetry(sc, fix, fromReview = null) {
     <h1>${bi("retry")}</h1>
     <p>${bi("retryPrompt")}</p>
     <section class="card">
-      <p class="big">${sayBtn(fix.better)}<b>${esc(fix.better)}</b></p>
+      <p class="big">${sayBtn(fix.better_furigana || fix.better)}<b>${esc(fix.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(fix.better_furigana)}</p>` : ""}
       ${fix.better_meaning ? `<p class="tr">${esc(fix.better_meaning)}</p>` : ""}
     </section>
@@ -481,7 +487,7 @@ async function playVoice(d, slow) {
     await drillCtx.resume();
     if (!audioCache.has(ck)) {
       const style = slow ? "外国人にもわかるように、とてもゆっくり、はっきり言う" : STYLE_PROMPT[d.style];
-      const a = await tts(S.getKey(), d.say, style, d.voice);
+      const a = await tts(S.getKey(), d.say_kana || d.say, style, d.voice);   // 読み間違いを防ぐため、ひらがなで渡す
       let buf;
       if (a.isWav) buf = await drillCtx.decodeAudioData(a.bytes.buffer.slice(0));
       else {
@@ -494,7 +500,7 @@ async function playVoice(d, slow) {
     const src = drillCtx.createBufferSource(); src.buffer = audioCache.get(ck); src.connect(drillCtx.destination); src.start();
   } catch (e) {
     console.warn("TTS fallback", e);
-    speak(d.say, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
+    speak(d.say_kana || d.say, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
   }
 }
 
@@ -537,7 +543,7 @@ function renderDrill(list, i) {
           <ul class="checks">${r.checks.map(c => `<li>${c.ok ? "✅" : "⬜"} ${esc(c.item)}</li>`).join("")}</ul>
           <p>${esc(L() === "ja" ? r.comment_ja : r.comment)}</p>
           ${L() !== "ja" ? `<p class="ja">${esc(r.comment_ja)}</p>` : ""}
-          <p class="better">${sayBtn(d.model)}${esc(t("modelAnswer"))}：<b>${esc(d.model)}</b></p>
+          <p class="better">${sayBtn(d.model_kana || d.model)}${esc(t("modelAnswer"))}：<b>${esc(d.model)}</b></p>
           <p class="note">${esc(t("instruction"))}：${esc(d.say)}</p>
         </section>
         <div class="row"><button id="again" class="sub">🔁 ${esc(t("tryAgain"))}</button><button id="next" class="primary">${esc(t("next"))} →</button></div>`;
@@ -656,7 +662,7 @@ function renderReview() {
     <section class="card"><p>${bi("howToSay")}</p><p class="big">${esc(c.meaning || "…")}</p></section>
     <button id="say" class="primary big">🎙 ${esc(t("speak"))}</button>
     <button id="reveal" class="sub">${esc(t("showAnswer"))}</button>
-    <section id="ans" class="card" hidden><p class="big">${sayBtn(c.better)}<b>${esc(c.better)}</b></p>
+    <section id="ans" class="card" hidden><p class="big">${sayBtn(c.better_furigana || c.better)}<b>${esc(c.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(c.better_furigana)}</p>` : ""}
       <div class="row"><button id="ok" class="sub">✅ ${esc(t("gotIt"))}</button><button id="ng" class="sub">🔁 ${esc(t("notYet"))}</button></div></section>`);
   $app.querySelector(".back").onclick = renderHome;
