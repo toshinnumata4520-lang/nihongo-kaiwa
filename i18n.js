@@ -93,6 +93,8 @@ const T = {
   needSetupBody:{ ja: "会社の 担当者が 準備を すると つかえるように なります。いまは 下の 練習が できます。", en: "It will work after your company contact sets it up. For now, you can do the practice below.", vi: "Sau khi người phụ trách của công ty cài đặt thì sẽ dùng được. Bây giờ bạn có thể luyện các bài bên dưới." },
   forStaff:     { ja: "担当者の かたへ", en: "For staff in charge", vi: "Dành cho người phụ trách" },
   selfCheck:    { ja: "おてほんと くらべて、自分で 答え合わせを しましょう", en: "Compare with the model answer and check yourself", vi: "So sánh với câu mẫu và tự kiểm tra" },
+  recording:    { ja: "聞いています。話して ください（おわったら ここを 押す）", en: "Listening. Speak now (tap here when done)", vi: "Đang nghe. Hãy nói (nói xong bấm vào đây)" },
+  speakNow:     { ja: "🎙 いま 話して ください。聞きとった 文字が ここに 出ます", en: "🎙 Speak now. What we hear will appear here", vi: "🎙 Hãy nói ngay. Chữ nghe được sẽ hiện ở đây" },
   cardQ:        { ja: "この ことばの いみは？", en: "What does this word mean?", vi: "Từ này nghĩa là gì?" },
   voiceLoading: { ja: "声を つくって います…（はじめは 数秒）", en: "Preparing the voice… (a few seconds the first time)", vi: "Đang tạo giọng nói… (lần đầu mất vài giây)" },
   voiceRetry:   { ja: "声が 出ませんでした。もう一度 ▶ を 押して ください", en: "No sound. Please press ▶ again", vi: "Không có tiếng. Hãy bấm ▶ lại" },

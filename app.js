@@ -1,13 +1,13 @@
-import { t, tja, getLang, setLang } from "./i18n.js";
-import { SCENES } from "./scenes.js";
-import { SITUATIONS } from "./situations.js";
-import { SAFETY_RULES, mask } from "./safety.js";
-import { startConversation, stopConversation, sendNote, liveSpeak, LIVE_MODEL } from "./live.js";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js";
-import { EXAMS } from "./exams.js";
-import * as S from "./store.js";
-import { autoSetup, preloadGis } from "./setup.js";
+import { t, tja, getLang, setLang } from "./i18n.js?v=202610091344";
+import { SCENES } from "./scenes.js?v=202610091344";
+import { SITUATIONS } from "./situations.js?v=202610091344";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610091344";
+import { startConversation, stopConversation, sendNote, liveSpeak, LIVE_MODEL } from "./live.js?v=202610091344";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, tts, TEXT_MODEL } from "./coach.js?v=202610091344";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610091344";
+import { EXAMS } from "./exams.js?v=202610091344";
+import * as S from "./store.js?v=202610091344";
+import { autoSetup, preloadGis } from "./setup.js?v=202610091344";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -462,17 +462,51 @@ async function renderFeedback(sc, transcript, seconds, liveUsage) {
 }
 
 // ───── 言い直し（ブラウザの音声認識。使えない端末では文字で入力） ─────
+// 「話す」ボタン：押すと赤く点滅して「聞いています」に変わり、聞き取れた文字をその場で見せる。
+// 話し終わったら「おわり」（黙っていても自動で終わる）。聞き取れているかが目で分かるようにする
 function listenOnce() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return Promise.resolve(null);
+  const $btn = document.getElementById("mic");
+  const label = $btn?.innerHTML;
   return new Promise(resolve => {
-    const r = new SR(); r.lang = "ja-JP"; r.interimResults = false; r.maxAlternatives = 1;
-    let got = "";
-    r.onresult = e => { got = e.results[0][0].transcript; };
-    r.onerror = () => resolve(got || "");
-    r.onend = () => resolve(got);
-    r.start();
+    const r = new SR(); r.lang = "ja-JP"; r.interimResults = true; r.maxAlternatives = 1; r.continuous = false;
+    let got = "", finished = false;
+    const box = document.createElement("div");
+    box.className = "livecap";
+    box.innerHTML = `<span class="placeholder">${esc(t("speakNow"))}</span>`;
+    $btn?.after(box);
+    if ($btn) {
+      $btn.classList.add("recording");
+      $btn.innerHTML = `🔴 ${bi("recording")}`;
+      $btn.onclick = () => r.stop();   // 「おわり」
+    }
+    const end = () => {
+      if (finished) return; finished = true;
+      if ($btn) { $btn.classList.remove("recording"); $btn.innerHTML = label; }
+      box.remove();
+      resolve(got);
+    };
+    r.onresult = e => {
+      let txt = "";
+      for (const res of e.results) txt += res[0].transcript;
+      got = txt;
+      box.textContent = txt || "…";
+    };
+    r.onerror = end;
+    r.onend = end;
+    try { r.start(); } catch { end(); }
   });
+}
+// listenOnce は「おわり」でも使うので、ボタンの元の動きは呼び出し側で付け直す
+function wireMic(onSaid, $res) {
+  const $btn = document.getElementById("mic");
+  $btn.onclick = async () => {
+    const said = await listenOnce();
+    wireMic(onSaid, $res);
+    if (said === null) { $res.innerHTML = `<p class="status">${esc(t("noSR"))}</p>`; document.getElementById("typeBox").focus(); return; }
+    onSaid(said);
+  };
 }
 
 function renderRetry(sc, fix, fromReview = null) {
@@ -505,12 +539,7 @@ function renderRetry(sc, fix, fromReview = null) {
       }
     } catch (e) { console.error(e); $res.textContent = t("error"); }
   };
-  document.getElementById("mic").onclick = async () => {
-    $res.textContent = t("listening");
-    const said = await listenOnce();
-    if (said === null) { $res.textContent = t("noSR"); document.getElementById("typeBox").focus(); return; }
-    judge(said);
-  };
+  wireMic(judge, $res);
   document.getElementById("typeForm").onsubmit = e => { e.preventDefault(); judge(document.getElementById("typeBox").value.trim()); };
 }
 
@@ -631,12 +660,7 @@ function renderDrill(list, i) {
       document.getElementById("next").onclick = () => renderDrill(list, i + 1);
     } catch (e) { console.error(e); $res.innerHTML = `<p class="status err">${esc(t("error"))}</p>`; }
   };
-  document.getElementById("mic").onclick = async () => {
-    $res.innerHTML = `<p class="status">${esc(t("listening"))}</p>`;
-    const said = await listenOnce();
-    if (said === null) { $res.innerHTML = `<p class="status">${esc(t("noSR"))}</p>`; document.getElementById("typeBox").focus(); return; }
-    judge(said);
-  };
+  wireMic(judge, $res);
   document.getElementById("typeForm").onsubmit = e => { e.preventDefault(); judge(document.getElementById("typeBox").value.trim()); };
 }
 
