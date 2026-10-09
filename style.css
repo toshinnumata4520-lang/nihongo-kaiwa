@@ -70,6 +70,12 @@ label { display: block; }
 .turn.hearing { background: #e3f3e8; color: #1f6b3d; }
 .meter { height: 8px; background: #e6e2d8; border-radius: 99px; overflow: hidden; margin-bottom: 8px; }
 .meter div { height: 100%; width: 0; background: #2f9e5c; transition: width .1s; }
+.answers { display: grid; gap: 8px; }
+.ans { text-align: left; font-size: 18px; padding: 12px 14px; }
+.ans.right { background: var(--ok-soft); border-color: var(--ok); }
+.ans.wrong { background: #fdecea; border-color: var(--err); }
+.exq u { text-decoration-thickness: 2px; text-underline-offset: 4px; }
+rt { font-size: 11px; color: var(--accent); }
 .model { padding-left: 22px; margin: 0; }
 .model li { padding: 8px 0; border-top: 1px solid var(--line); }
 .model li:first-child { border-top: none; }

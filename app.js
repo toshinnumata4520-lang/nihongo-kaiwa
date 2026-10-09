@@ -5,6 +5,7 @@ import { SAFETY_RULES, mask } from "./safety.js";
 import { startConversation, stopConversation, sendNote, LIVE_MODEL } from "./live.js";
 import { makeFeedback, judgeRetry, judgeDrill, TEXT_MODEL } from "./coach.js";
 import { DRILLS, DRILL_INDUSTRIES } from "./drills.js";
+import { EXAMS } from "./exams.js";
 import * as S from "./store.js";
 import { autoSetup, preloadGis } from "./setup.js";
 
@@ -85,6 +86,11 @@ function renderHome() {
       <p class="note">${esc(t("drillNote"))}</p>
       <div class="row">${DRILL_INDUSTRIES.map(i => `<button class="choice" data-ind="${esc(i)}">${esc(i)}</button>`).join("")}</div>
     </section>
+    <section class="card">
+      <h2>📝 ${bi("examTitle")}</h2>
+      <div class="row">${EXAM_SETS.map((s, i) => `<button class="choice" data-exam="${i}">${esc(s.name)}</button>`).join("")}</div>
+      <p class="note">${esc(t("examNote"))}</p>
+    </section>
     <h2>${bi("scenes")}</h2>
     ${SCENES.map(sc => {
       const st = S.sceneStatus(sc.id);
@@ -98,6 +104,7 @@ function renderHome() {
     <p class="note">${bi("aiNote")}</p>`);
   $app.querySelectorAll(".scene").forEach(b => b.onclick = () => renderPrep(SCENES.find(s => s.id === b.dataset.id)));
   $app.querySelectorAll("[data-ind]").forEach(b => b.onclick = () => renderDrill(DRILLS.filter(d => d.industry === b.dataset.ind), 0));
+  $app.querySelectorAll("[data-exam]").forEach(b => b.onclick = () => startExam(EXAM_SETS[+b.dataset.exam]));
   document.getElementById("review").onclick = renderReview;
   document.getElementById("settings").onclick = renderSettings;
 }
@@ -438,6 +445,92 @@ function renderDrill(list, i) {
   document.getElementById("typeForm").onsubmit = e => { e.preventDefault(); judge(document.getElementById("typeBox").value.trim()); };
 }
 
+// ───── 試験対策（形式に合わせた自作の模擬問題。1回10問） ─────
+const EXAM_SETS = [
+  { name: "JLPT N4", filter: q => q.exam === "JLPT-N4" },
+  { name: "JLPT N3", filter: q => q.exam === "JLPT-N3" },
+  { name: "JFT-Basic", filter: q => q.exam === "JFT-Basic" && !q.script },
+  { name: "JFT-Basic 聴解", filter: q => q.exam === "JFT-Basic" && !!q.script },
+];
+const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+
+// 「漢字(よみ)」をふりがな付きの表示に、【語】を下線にする
+function examText(q) {
+  const raw = S.getFurigana() ? q.question_furigana : q.question_ja;
+  let h = esc(raw).replace(/【(.+?)】/g, "<u>$1</u>");
+  if (S.getFurigana()) h = h.replace(/([一-龯々〆ヶ]+)\(([ぁ-んー]+)\)/g, "<ruby>$1<rt>$2</rt></ruby>");
+  return h.replace(/\n/g, "<br>");
+}
+
+// 聴解の台本を、話す人ごとに声の高さを変えて読み上げる
+function playScript(script) {
+  if (!window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const v = speechSynthesis.getVoices().find(v => v.lang === "ja-JP");
+  for (const line of script.split("\n")) {
+    const m = line.match(/^(男|女|店員|客|アナウンス|[^：]{1,6})：(.*)$/);
+    const u = new SpeechSynthesisUtterance(m ? m[2] : line);
+    u.lang = "ja-JP"; u.rate = 0.95; if (v) u.voice = v;
+    u.pitch = m?.[1] === "男" ? 0.7 : m?.[1] === "女" ? 1.3 : 1;
+    speechSynthesis.speak(u);
+  }
+}
+
+function startExam(set) {
+  const qs = shuffle(EXAMS.filter(set.filter)).slice(0, 10).map(q => {
+    const order = shuffle([0, 1, 2, 3]);   // 正解の位置が偏らないよう、選択肢を毎回並べかえる
+    return { ...q, choicesShown: order.map(i => q.choices[i]), answerShown: order.indexOf(q.answer_index) };
+  });
+  renderExamQ(set, qs, 0, []);
+}
+
+function renderExamQ(set, qs, i, results) {
+  if (i >= qs.length) return renderExamResult(set, qs, results);
+  const q = qs[i];
+  let plays = 0;
+  show(`
+    <button class="back link">← ${esc(t("home"))}</button>
+    <div class="row between"><h1>📝 ${esc(set.name)}（${i + 1}/${qs.length}）</h1>
+      <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${esc(t("furigana"))}</label></div>
+    <p class="note">${esc(q.section)}</p>
+    ${q.script ? `<button id="play" class="primary">▶ ${esc(t("listen"))}（${esc(t("upTo2"))}）</button>` : ""}
+    <section class="card"><p class="big exq">${examText(q)}</p></section>
+    <div class="answers">${q.choicesShown.map((c, k) => `<button class="ans" data-k="${k}">${k + 1}. ${esc(c)}</button>`).join("")}</div>
+    <div id="res"></div>`);
+  $app.querySelector(".back").onclick = renderHome;
+  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderExamQ(set, qs, i, results); };
+  const $play = document.getElementById("play");
+  if ($play) $play.onclick = () => { if (plays >= 2) return; plays++; playScript(q.script); if (plays >= 2) $play.disabled = true; };
+  $app.querySelectorAll(".ans").forEach(b => b.onclick = () => {
+    const k = +b.dataset.k, ok = k === q.answerShown;
+    $app.querySelectorAll(".ans").forEach(x => { x.disabled = true; if (+x.dataset.k === q.answerShown) x.classList.add("right"); });
+    if (!ok) b.classList.add("wrong");
+    results.push({ id: q.id, ok });
+    const ex = L() === "ja" ? q.explain_ja : q[`explain_${L()}`] || q.explain_en;
+    document.getElementById("res").innerHTML = `
+      <section class="card result ${ok ? "ok" : ""}">
+        <p class="big">${ok ? "✅ " + esc(t("great")) : "🔁 " + esc(t("examWrong"))}</p>
+        <p>${esc(ex)}</p>${L() !== "ja" ? `<p class="ja">${esc(q.explain_ja)}</p>` : ""}
+        ${q.script ? `<details><summary class="note">${esc(t("showText"))}</summary><p>${esc(q.script).replace(/\n/g, "<br>")}</p></details>` : ""}
+      </section>
+      <button id="next" class="primary">${esc(t("next"))} →</button>`;
+    document.getElementById("next").onclick = () => renderExamQ(set, qs, i + 1, results);
+  });
+}
+
+function renderExamResult(set, qs, results) {
+  const n = results.filter(r => r.ok).length;
+  S.addSession({ type: "exam", exam: set.name, at: new Date().toISOString(), seconds: 0, score: n, total: qs.length, results });
+  show(`
+    <h1>📝 ${esc(set.name)}</h1>
+    <section class="card result ${n >= qs.length * 0.7 ? "ok" : ""}"><p class="big">${n} / ${qs.length}</p>
+      <p>${esc(t(n >= qs.length * 0.7 ? "examGood" : "examKeep"))}</p></section>
+    <button id="again" class="primary">🔁 ${esc(t("examAgain"))}</button>
+    <button id="home" class="link">${esc(t("home"))}</button>`);
+  document.getElementById("again").onclick = () => startExam(set);
+  document.getElementById("home").onclick = renderHome;
+}
+
 // ───── 復習 ─────
 function renderReview() {
   const cards = S.dueCards();
@@ -498,7 +591,7 @@ function renderSettings() {
       <p>${sessions.length} ${esc(t("times"))} ・ ${(totalSec / 60).toFixed(1)} ${esc(t("minutes"))} ・ ${esc(t("estCost"))} ${totalYen.toFixed(1)}円
         ${totalSec ? `（${(totalYen / (totalSec / 60)).toFixed(2)}円/${esc(t("minutes"))}）` : ""}</p>
       <table class="rec"><tr><th>${esc(t("date"))}</th><th>${esc(t("scene"))}</th><th>${esc(t("seconds"))}</th><th>${esc(t("goalShort"))}</th><th>円</th></tr>
-      ${sessions.map(s => `<tr><td>${esc(s.at.slice(5, 16).replace("T", " "))}</td><td>${esc(s.type === "drill" ? "👂 " + s.drill : SCENES.find(x => x.id === s.scene)?.title_ja.slice(0, 10) || s.scene)}</td>
+      ${sessions.map(s => `<tr><td>${esc(s.at.slice(5, 16).replace("T", " "))}</td><td>${esc(s.type === "exam" ? `📝 ${s.exam} ${s.score}/${s.total}` : s.type === "drill" ? "👂 " + s.drill : SCENES.find(x => x.id === s.scene)?.title_ja.slice(0, 10) || s.scene)}</td>
         <td>${s.seconds}</td><td>${s.type === "drill" ? (s.ok ? "○" : "△") : s.feedback ? (s.feedback.goal_achieved ? "○" : "△") : "−"}</td><td>${cost(s).toFixed(1)}</td></tr>`).join("")}
       </table>
       <button id="export" class="sub">${esc(t("export"))}</button>
