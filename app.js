@@ -1,14 +1,15 @@
-import { t, tja, getLang, setLang } from "./i18n.js?v=202610092323";
-import { SCENES } from "./scenes.js?v=202610092323";
-import { SITUATIONS } from "./situations.js?v=202610092323";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610092323";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610092323";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610092323";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610092323";
-import { EXAMS } from "./exams.js?v=202610092323";
-import { RUBY } from "./ruby.js?v=202610092323";
-import * as S from "./store.js?v=202610092323";
-import { autoSetup, preloadGis } from "./setup.js?v=202610092323";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610092339";
+import { SCENES } from "./scenes.js?v=202610092339";
+import { SITUATIONS } from "./situations.js?v=202610092339";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610092339";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610092339";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610092339";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610092339";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610092339";
+import { EXAMS } from "./exams.js?v=202610092339";
+import { RUBY } from "./ruby.js?v=202610092339";
+import * as S from "./store.js?v=202610092339";
+import { autoSetup, preloadGis } from "./setup.js?v=202610092339";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -27,8 +28,8 @@ const jr = s => S.getFurigana() && RUBY[s] ? rubyHtml(RUBY[s]) : esc(s);
 const tx = k => L() === "ja" ? jr(t(k)) : esc(t(k));
 // 選んだ言語の文と、日本語の文を並べる（日本語を読む練習にもなるように）
 const bi = k => L() === "ja" ? jr(t(k)) : `${esc(t(k))}<span class="ja">${jr(tja(k))}</span>`;
-const sceneTitle = sc => L() === "ja" ? sc.title_ja : sc.title?.[L()] || sc.title_ja;
-const sceneGoal = sc => L() === "ja" ? sc.goal_ja : sc.goal?.[L()] || sc.goal_ja;
+const sceneTitle = sc => L() === "ja" ? sc.title_ja : tr(sc.title) || sc.title_ja;
+const sceneGoal = sc => L() === "ja" ? sc.goal_ja : tr(sc.goal) || sc.goal_ja;
 
 // 画面を切り替えるたびに、前の画面の音・マイク・AIとの接続をすべて止める
 // （「画面を変えても音声が流れ続ける」への対応）。playToken は、作りかけの声が後から別の画面で鳴るのを防ぐ番号
@@ -149,7 +150,7 @@ function renderSetup() {
     <section class="card">
       <h2>${bi("chooseLang")}</h2>
       <div class="row">
-        ${[["ja", "日本語"], ["en", "English"], ["vi", "Tiếng Việt"]].map(([v, n]) =>
+        ${LANGS.map(([v, n]) =>
           `<button class="choice ${L() === v ? "on" : ""}" data-lang="${v}">${n}</button>`).join("")}
       </div>
     </section>
@@ -184,7 +185,7 @@ const INDUSTRY = {
 };
 function industryLabel(i) {
   const x = INDUSTRY[i] || { icon: "", furi: "" };
-  return `<span class="indicon">${x.icon}</span><ruby>${esc(i)}<rt>${esc(x.furi)}</rt></ruby>${L() !== "ja" && x[L()] ? `<small>${esc(x[L()])}</small>` : ""}`;
+  return `<span class="indicon">${x.icon}</span><ruby>${esc(i)}<rt>${esc(x.furi)}</rt></ruby>${L() !== "ja" && tr(x) ? `<small>${esc(tr(x))}</small>` : ""}`;
 }
 
 // AIの準備（キー）がまだのとき：開発者向けの設定画面に飛ばさず、やさしく説明して、すぐできる練習へ案内する
@@ -212,7 +213,13 @@ const TABS = [
   { id: "talk", icon: "🗣", k: "tabTalk" },
   { id: "listen", icon: "👂", k: "tabListen" },
   { id: "exam", icon: "📝", k: "tabExam" },
+  { id: "rules", icon: "📘", k: "tabRules" },
 ];
+let currentRuleCat = MANNER_CATS[0].id;
+// ルール・マナーを、試験の画面で解ける形にする（説明＝大事なこと＋なぜ）
+const mannerQ = m => ({ id: m.id, exam: "ルール・マナー", section: m.title.ja, question_ja: m.q.ja, choices: m.q.choices, answer_index: m.q.answer,
+  explain_ja: `${m.point.ja}\n${m.why.ja}`, explain_en: `${m.point.en} ${m.why.en}`, explain_vi: `${m.point.vi} ${m.why.vi}` });
+const mannerSet = (name, list) => ({ name, items: list.map(mannerQ) });
 let currentTab = (() => { try { return localStorage.getItem("nk.tab") || "today"; } catch { return "today"; } })();
 const sceneArea = sc => sc.title_ja.split("：")[0];   // 「飲食：注文を受けて…」→「飲食」
 const sceneShort = sc => sc.title_ja.split("：").slice(1).join("：") || sc.title_ja;
@@ -271,6 +278,21 @@ function renderHome(tab) {
       <p class="note">${tx("drillNote")}</p>
       <div class="row">${DRILL_INDUSTRIES.map(i => `<button class="choice ind" data-ind="${esc(i)}">${industryLabel(i)}</button>`).join("")}</div>
     </section>`;
+  } else if (tab === "rules") {
+    const cat = MANNER_CATS.find(c => c.id === currentRuleCat) || MANNER_CATS[0];
+    const list = MANNERS.filter(m => m.cat === cat.id);
+    body = `<h2>📘 ${bi("rulesTitle")}</h2>
+    <p class="note">${tx("rulesNote")}</p>
+    <div class="cats">${MANNER_CATS.map(c => `<button class="choice cat ${c.id === cat.id ? "on" : ""}" data-cat="${c.id}">${c.icon} ${jr(c.ja)}${L() !== "ja" ? `<small>${esc(tr(c))}</small>` : ""}</button>`).join("")}</div>
+    <h3 class="area">${cat.icon} ${jr(cat.ja)}</h3>
+    ${list.map(m => `<details class="card manner">
+      <summary><b>${jr(m.title.ja)}</b>${L() !== "ja" ? `<small>${esc(tr(m.title))}</small>` : ""}</summary>
+      <p>${sayBtn(m.point.ja)}${jr(m.point.ja)}</p>
+      ${L() !== "ja" ? `<p class="tr">${esc(tr(m.point))}</p>` : ""}
+      <p class="note"><b>${tx("rulesWhy")}</b> ${jr(m.why.ja)}</p>
+      ${L() !== "ja" ? `<p class="tr">${esc(tr(m.why))}</p>` : ""}
+    </details>`).join("")}
+    <div class="row"><button id="quizCat" class="primary">🧩 ${tx("rulesQuiz")}</button><button id="quizAll" class="sub">${tx("rulesQuizAll")}</button></div>`;
   } else {
     body = `<section class="card">
       <h2>📝 ${bi("examTitle")}</h2>
@@ -295,6 +317,13 @@ function renderHome(tab) {
   $app.querySelectorAll("[data-ind]").forEach(b => b.onclick = () => renderDrill(DRILLS.filter(d => d.industry === b.dataset.ind), 0));
   $app.querySelectorAll("[data-exam]").forEach(b => b.onclick = () => startExam(EXAM_SETS[+b.dataset.exam]));
   document.getElementById("review")?.addEventListener("click", renderReview);
+  $app.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => { currentRuleCat = b.dataset.cat; renderHome("rules"); });
+  const $qc = document.getElementById("quizCat");
+  if ($qc) {
+    const cat = MANNER_CATS.find(c => c.id === currentRuleCat) || MANNER_CATS[0];
+    $qc.onclick = () => startExam(mannerSet(`ルール・マナー：${cat.ja}`, MANNERS.filter(m => m.cat === cat.id)));
+    document.getElementById("quizAll").onclick = () => startExam(mannerSet("ルール・マナー", MANNERS));
+  }
   document.getElementById("settings").onclick = renderSettings;
   document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderHome(tab); };
 }
@@ -302,14 +331,14 @@ function renderHome(tab) {
 // ───── 準備 ─────
 function phraseHtml(p) {
   const furi = S.getFurigana();
-  const tr = L() === "ja" ? p.en : p[L()] || p.en;
+  const tr2 = L() === "ja" ? p.en : tr(p);
   return `<li class="phrase">${sayBtn(p.furigana || p.ja)}<span class="jp">${esc(p.ja)}</span>
     ${furi ? `<span class="furi">${esc(p.furigana)}</span>` : ""}
-    <span class="tr">${esc(tr)}</span></li>`;
+    <span class="tr">${esc(tr2)}</span></li>`;
 }
 
 // 状況カード：自分の立場・いま起きていること・伝えること。準備画面と会話中の両方に出す
-const loc = o => L() === "ja" ? o.ja : o[L()] || o.en;
+const loc = o => L() === "ja" ? o.ja : tr(o);
 function situationHtml(sc, compact = false, hideTodo = false) {
   const s = SITUATIONS[sc.id];
   if (!s) return "";
@@ -410,13 +439,13 @@ function systemFor(sc, level) {
     5: "学習者は状況カードだけで話すいちばん上の段階。ふつうの速さで話す。途中で、状況と矛盾しない予想外のこと（例：「今、手が離せない」「その時間だと困る」）を1つだけ混ぜてよい。",
   }[level] || "";
   const s = SITUATIONS[sc.id];
-  const langName = { ja: "やさしい日本語", en: "英語", vi: "ベトナム語" }[L()] || "英語";
+  const langName = { ja: "やさしい日本語", en: "英語", vi: "ベトナム語", id: "インドネシア語", tl: "タガログ語（フィリピノ語）" }[L()] || "英語";
   return `${SAFETY_RULES}
 
 # 練習の内容
 これは外国人の日本語学習者（目安 ${sc.level}）との、職場・生活の会話練習（ロールプレイ）です。
 あなたの役: ${sc.ai_role}
-学習者の練習用の名前: ${mask(nick)}（本名ではない）
+学習者のニックネーム: ${mask(nick)}（学習者が名前を言うときは、このニックネームを使う。名前について注意や指摘はしない）
 今日の目標: ${sc.goal_ja}
 ${s ? `学習者に見せている状況: ${s.you.ja} ${s.now.ja}
 学習者がやること（順番の目安）: ${s.todo.map((x, i) => `${i + 1}. ${x.ja}`).join(" / ")}
@@ -910,6 +939,7 @@ const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i-
 
 // 「漢字(よみ)」をふりがな付きの表示に、【語】を下線にする
 function examText(q) {
+  if (!q.question_furigana) return jr(q.question_ja).replace(/\n/g, "<br>");   // ルール・マナーの問題など
   // 用語カード：語を大きく、ふりがなは語の上に
   if (q.term) return `${tx("cardQ")}<br><span class="term">${S.getFurigana() && q.reading && q.reading !== q.term ? `<ruby>${esc(q.term)}<rt>${esc(q.reading)}</rt></ruby>` : esc(q.term)}</span>`;
   // ふりがなが「全文ひらがな」の問題（一問一答）は、漢字の文の下に、ひらがなの行をそえる
@@ -944,7 +974,7 @@ function playScript(script) {
 }
 
 function startExam(set) {
-  const qs = shuffle(EXAMS.filter(set.filter)).slice(0, 10).map(q => {
+  const qs = shuffle(set.items || EXAMS.filter(set.filter)).slice(0, 10).map(q => {
     if (!q.choices) return q;   // こたえを見て自分で〇つけする問題（短答・用語カード）
     // 4択は正解の位置が偏らないよう毎回並べかえる。○×はそのまま
     const order = q.choices.length > 2 ? shuffle(q.choices.map((_, i) => i)) : q.choices.map((_, i) => i);
@@ -976,7 +1006,7 @@ function renderExamQ(set, qs, i, results) {
   const $rev = document.getElementById("reveal");
   if ($rev) $rev.onclick = () => {
     $rev.remove();
-    const ex = L() === "ja" ? "" : q[`explain_${L()}`] || q.explain_en;
+    const ex = L() === "ja" ? "" : q[`explain_${L()}`] || trEn(q.explain_en);
     const $r = document.getElementById("res");
     $r.innerHTML = `<section class="card"><p class="big"><b>${jr(q.answer_text)}</b></p>
         ${ex ? `<p>${esc(ex)}</p>` : ""}<p class="note">${jr(q.explain_ja)}</p></section>
@@ -995,7 +1025,7 @@ function renderExamQ(set, qs, i, results) {
     $app.querySelectorAll(".ans").forEach(x => { x.disabled = true; if (+x.dataset.k === q.answerShown) x.classList.add("right"); });
     if (!ok) b.classList.add("wrong");
     if (!answered()) results.push({ id: q.id, ok });   // ふりがなを切り替えて描き直しても、2回は数えない
-    const ex = L() === "ja" ? q.explain_ja : q[`explain_${L()}`] || q.explain_en;
+    const ex = L() === "ja" ? q.explain_ja : q[`explain_${L()}`] || trEn(q.explain_en);
     document.getElementById("res").innerHTML = `
       <section class="card result ${ok ? "ok" : ""}">
         <p class="big">${ok ? "✅ " + tx("great") : "🔁 " + tx("examWrong")}</p>
@@ -1065,6 +1095,10 @@ function renderSettings() {
   show(`
     <button class="back link">← ${tx("home")}</button>
     <h1>${tx("settings")}</h1>
+    <section class="card">
+      <label>${bi("nickname")}<input id="nickEdit" value="${esc(S.getProfile()?.nickname || "")}" placeholder="${esc(t("nicknameHint"))}" maxlength="20"></label>
+      <button id="saveNick" class="sub">${tx("save")}</button> <span id="nickSaved" class="note"></span>
+    </section>
     <section class="card ${S.getKey() ? "" : "goal"}">
       <h2>${tx("easySetup")}</h2>
       <p class="note">${esc(t(S.getKey() ? "keyReady" : "easySetupNote"))}</p>
@@ -1088,10 +1122,16 @@ function renderSettings() {
       <button id="wipe" class="sub danger">${tx("deleteRecords")}</button>
     </section>
     <section class="card"><h2>${bi("chooseLang")}</h2><div class="row">
-      ${[["ja", "日本語"], ["en", "English"], ["vi", "Tiếng Việt"]].map(([v, n]) => `<button class="choice ${L() === v ? "on" : ""}" data-lang="${v}">${n}</button>`).join("")}
+      ${LANGS.map(([v, n]) => `<button class="choice ${L() === v ? "on" : ""}" data-lang="${v}">${n}</button>`).join("")}
     </div></section>`);
   $app.querySelector(".back").onclick = renderHome;
   $app.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => { setLang(b.dataset.lang); renderSettings(); });
+  // ニックネーム：AIはこの名前で呼ぶ
+  document.getElementById("saveNick").onclick = () => {
+    const v = document.getElementById("nickEdit").value.trim();
+    S.setProfile({ ...(S.getProfile() || {}), nickname: v });
+    document.getElementById("nickSaved").textContent = "✓";
+  };
   document.getElementById("saveKey").onclick = () => {
     const v = document.getElementById("key").value.trim();
     if (!v && S.getKey() && !confirm(t("deleteKeyConfirm"))) return;

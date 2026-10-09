@@ -21,7 +21,7 @@ async function generate(key, prompt, schema) {
   return { result: JSON.parse(text), usage: data.usageMetadata || {} };
 }
 
-const LANG_NAME = { ja: "やさしい日本語", en: "English", vi: "Vietnamese" };
+const LANG_NAME = { ja: "やさしい日本語", en: "English", vi: "Vietnamese", id: "Indonesian", tl: "Tagalog (Filipino)" };
 
 // 会話の文字記録から、目標の達成・4つの観点・いちばん大事な直し1つを作る
 export function makeFeedback(key, scene, transcript, lang) {
@@ -98,7 +98,7 @@ export function makeScaffold(key, scene, situation, lang) {
 - skeleton: full の大事な部分（数字・場所・動詞など2〜3か所）を「＿＿」にした文
 - keywords: 言うときのヒントになる語を2〜4個（日本語）
 - wrong: full と似ているが、この場面では不適切な文を2つ（丁寧さが足りない、内容が状況と違う、文法がおかしい など。理由が分かる程度に）
-- meaning: full の意味を${{ ja: "English", en: "English", vi: "Vietnamese" }[lang] || "English"}で`;
+- meaning: full の意味を${{ ja: "English", en: "English", vi: "Vietnamese", id: "Indonesian", tl: "Tagalog (Filipino)" }[lang] || "English"}で`;
   const schema = {
     type: "OBJECT",
     properties: { steps: { type: "ARRAY", items: { type: "OBJECT", properties: {
@@ -128,7 +128,7 @@ ${isAsk
 ${isAsk ? "" : "- 丁寧に聞き返した場合（「すみません、もう一度お願いします」など）は ok=false のままでよいが、comment で「聞き返せたのはとてもいい」とほめてから、次は復唱しようと伝える。\n"}- checks は${isAsk ? "聞き返すべき点" : "必ず入れる情報"}と同じ順・同じ数で返し、item にはその情報の名前をそのまま入れる。
 - checks: ${isAsk ? "聞き返すべき点" : "必ず入れる情報"}ごとに、言えたか（ok）
 - comment_ja: やさしい日本語で、できたことをほめてから、足りない点を1つ（50字以内）
-- comment: 同じ内容を${{ ja: "やさしい日本語", en: "English", vi: "Vietnamese" }[lang] || "English"}で`;
+- comment: 同じ内容を${{ ja: "やさしい日本語", en: "English", vi: "Vietnamese", id: "Indonesian", tl: "Tagalog (Filipino)" }[lang] || "English"}で`;
   const schema = {
     type: "OBJECT",
     properties: {

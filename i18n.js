@@ -1,11 +1,12 @@
+import { EXTRA } from "./lang_extra.js?v=202610092339";
 // 画面の言葉。日本語は「やさしい日本語」。ベトナム語は仮訳（教材担当の確認待ち）。
 const T = {
   appName:      { ja: "しごとの日本語れんしゅう", en: "Work Japanese Practice", vi: "Luyện tiếng Nhật công việc" },
   chooseLang:   { ja: "ことばを えらんでください", en: "Choose your language", vi: "Chọn ngôn ngữ của bạn" },
-  nickname:     { ja: "れんしゅうで つかう なまえ（ほんとうの なまえは だめ）", en: "Practice name (not your real name)", vi: "Tên dùng khi luyện tập (không dùng tên thật)" },
+  nickname:     { ja: "ニックネーム（よばれたい なまえ）", en: "Nickname (what you want to be called)", vi: "Biệt danh (tên bạn muốn được gọi)" },
   nicknameHint: { ja: "れい：ミン、アニ、トム", en: "e.g. Minh, Ani, Tom", vi: "Ví dụ: Minh, Ani, Tom" },
   consentTitle: { ja: "はじめる まえに", en: "Before you start", vi: "Trước khi bắt đầu" },
-  consentBody:  { ja: "AIと 声で 日本語を れんしゅうします。会話は Google（アメリカ など）の AIで 処理されます。声は 保存しません。会話の 文字だけ この スマホに 残ります。「話す」ボタンの 声の 入力は、スマホの 音声入力（Google または Apple）を つかいます。ほんとうの なまえ・会社の なまえ・住所・在留カードの 番号は 話さないでください。", en: "You will practice Japanese by talking with an AI. Your conversation is processed by Google's AI (in the USA and other countries). Your voice is not saved. Only the text of the conversation stays on this phone. The “Speak” button uses your phone's voice input (Google or Apple). Do not say your real name, company name, address or residence card number.", vi: "Bạn sẽ luyện tiếng Nhật bằng cách nói chuyện với AI. Cuộc trò chuyện được AI của Google (ở Mỹ và các nước khác) xử lý. Giọng nói không được lưu. Chỉ phần chữ của cuộc trò chuyện được giữ trên điện thoại này. Nút “Nói” dùng chức năng nhập giọng nói của điện thoại (Google hoặc Apple). Đừng nói tên thật, tên công ty, địa chỉ hoặc số thẻ cư trú." },
+  consentBody:  { ja: "AIと 声で 日本語を れんしゅうします。会話は Google（アメリカ など）の AIで 処理されます。声は 保存しません。会話の 文字だけ この スマホに 残ります。「話す」ボタンの 声の 入力は、スマホの 音声入力（Google または Apple）を つかいます。住所・電話番号・在留カードの 番号は 話さないでください。", en: "You will practice Japanese by talking with an AI. Your conversation is processed by Google's AI (in the USA and other countries). Your voice is not saved. Only the text of the conversation stays on this phone. The “Speak” button uses your phone's voice input (Google or Apple). Do not say your address, phone number or residence card number.", vi: "Bạn sẽ luyện tiếng Nhật bằng cách nói chuyện với AI. Cuộc trò chuyện được AI của Google (ở Mỹ và các nước khác) xử lý. Giọng nói không được lưu. Chỉ phần chữ của cuộc trò chuyện được giữ trên điện thoại này. Nút “Nói” dùng chức năng nhập giọng nói của điện thoại (Google hoặc Apple). Đừng nói địa chỉ, số điện thoại hoặc số thẻ cư trú." },
   agree:        { ja: "わかりました。はじめます", en: "I understand. Start", vi: "Tôi hiểu. Bắt đầu" },
   devKey:       { ja: "開発用 APIキー（テスト担当者だけ）", en: "Developer API key (testers only)", vi: "Khóa API dành cho nhà phát triển (chỉ người thử nghiệm)" },
   save:         { ja: "保存", en: "Save", vi: "Lưu" },
@@ -36,6 +37,12 @@ const T = {
   tabExam:      { ja: "試験", en: "Exams", vi: "Thi" },
   nextUp:       { ja: "つぎの おすすめ", en: "Up next", vi: "Bài tiếp theo" },
   thinkFirst:   { ja: "もっと いい 言い方は ありますか？ まず 自分で 考えて みましょう", en: "Is there a better way to say it? Think first, then check", vi: "Có cách nói tốt hơn không? Hãy tự nghĩ trước rồi xem đáp án" },
+  tabRules:     { ja: "ルール", en: "Rules", vi: "Quy tắc" },
+  rulesTitle:   { ja: "日本の ルール・マナー", en: "Japanese rules and manners", vi: "Quy tắc và phép lịch sự ở Nhật" },
+  rulesNote:    { ja: "生活の 場面を えらんで ください。おぼえたら クイズで たしかめましょう。", en: "Choose a scene from daily life. Then check yourself with the quiz.", vi: "Chọn một tình huống trong cuộc sống. Sau đó kiểm tra bằng câu đố." },
+  rulesQuiz:    { ja: "この 場面の クイズ", en: "Quiz for this scene", vi: "Câu đố cho tình huống này" },
+  rulesQuizAll: { ja: "ぜんぶから クイズ（10問）", en: "Quiz from all scenes (10)", vi: "Câu đố tất cả (10 câu)" },
+  rulesWhy:     { ja: "なぜ？", en: "Why?", vi: "Tại sao?" },
   connLost:     { ja: "つながりが 切れました", en: "The connection was lost", vi: "Mất kết nối" },
   reconnect:    { ja: "もう一度 つなぐ", en: "Connect again", vi: "Kết nối lại" },
   startFailed:  { ja: "この ブラウザでは 会話を はじめられません。Safari か Chrome で ひらいて ください", en: "Couldn't start the conversation in this browser. Please open it in Safari or Chrome", vi: "Không bắt đầu được hội thoại trên trình duyệt này. Hãy mở bằng Safari hoặc Chrome" },
@@ -145,10 +152,15 @@ const T = {
 };
 
 const ls = (() => { try { const s = window.localStorage; s.getItem("x"); return s; } catch { return null; } })();
-let lang = ls?.getItem("nk.lang") || (/^vi/i.test(navigator.language) ? "vi" : /^ja/i.test(navigator.language) ? "ja" : /^en/i.test(navigator.language) ? "en" : "ja");
+const nav = navigator.language || "";
+let lang = ls?.getItem("nk.lang") || (/^vi/i.test(nav) ? "vi" : /^id|^in/i.test(nav) ? "id" : /^(tl|fil)/i.test(nav) ? "tl" : /^ja/i.test(nav) ? "ja" : /^en/i.test(nav) ? "en" : "ja");
 document.documentElement.lang = lang;
 export const getLang = () => lang;
 export function setLang(l) { lang = l; document.documentElement.lang = l; try { ls?.setItem("nk.lang", l); } catch {} }
 // 指定言語の文。日本語以外を選んでいる人には、日本語も下に小さく出せるよう両方返す関数も用意
-export const t = k => T[k]?.[lang] ?? T[k]?.ja ?? k;
+// インドネシア語・タガログ語は、英語の文をもとにした訳の表（lang_extra.js）から引く。表になければ英語
+export const LANGS = [["ja", "日本語"], ["en", "English"], ["vi", "Tiếng Việt"], ["id", "Bahasa Indonesia"], ["tl", "Tagalog"]];
+export const trEn = en => (en && EXTRA[lang]?.[en]) || en;
+export const tr = o => o?.[lang] ?? trEn(o?.en) ?? o?.ja;   // { ja, en, vi } の形のデータを、選んだ言語で
+export const t = k => T[k]?.[lang] ?? (EXTRA[lang] && T[k]?.en ? trEn(T[k].en) : undefined) ?? T[k]?.ja ?? k;
 export const tja = k => T[k]?.ja ?? k;

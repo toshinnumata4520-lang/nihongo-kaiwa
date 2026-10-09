@@ -3,7 +3,7 @@
 // AIの役（scenes.js の ai_role）と人名・数字をそろえること。
 export const SITUATIONS = {
   work_late_call: {
-    you: { ja: "あなたは 食品工場で 働いています。名前は「練習用の名前」を 使います。", en: "You work at a food factory. Use your practice name.", vi: "Bạn làm việc ở nhà máy thực phẩm. Dùng tên luyện tập của bạn." },
+    you: { ja: "あなたは 食品工場で 働いています。", en: "You work at a food factory.", vi: "Bạn làm việc ở nhà máy thực phẩm." },
     now: { ja: "朝 7時50分。駅で 電車が 止まっています。仕事は 8時半から。9時10分ごろ 着きそうです。班長の 山田さんに 電話を かけました。", en: "7:50 a.m. Your train is stopped at the station. Work starts at 8:30. You will arrive around 9:10. You called your team leader, Mr. Yamada.", vi: "7 giờ 50 sáng. Tàu đang dừng ở ga. Giờ làm bắt đầu lúc 8 giờ 30. Bạn sẽ đến khoảng 9 giờ 10. Bạn đã gọi cho tổ trưởng Yamada." },
     todo: [
       { ja: "名前を 言う", en: "Say your name", vi: "Nói tên của bạn" },

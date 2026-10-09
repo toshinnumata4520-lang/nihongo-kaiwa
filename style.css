@@ -158,3 +158,10 @@ header.top .settingsbtn { padding: 8px 10px; min-height: 44px; }
 /* 会話中に言えた「やること」 */
 .todo li.done { color: var(--ok, #2e7d32); }
 .todo li.done::after { content: " ✅"; }
+
+/* ルール・マナー */
+.cats { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.cats .cat { min-height: 44px; }
+.cats .cat small, .manner summary small { display: block; font-size: 12px; color: var(--muted, #667); font-weight: normal; }
+.manner summary { cursor: pointer; }
+.manner p { margin: 8px 0; line-height: 1.7; }
