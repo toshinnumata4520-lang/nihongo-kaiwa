@@ -192,8 +192,8 @@ function renderTalk(sc) {
   show(`
     <div class="talk">
       <div class="row between"><h1>${esc(sceneTitle(sc))}</h1><span id="clock" class="clock">5:00</span></div>
-      <p id="status" class="status">${esc(t("connecting"))}</p>
-      <div id="turn" class="turn wait">${esc(t("connecting"))}</div>
+      <div id="turn" class="turn wait"><span class="icon">⏳</span>${esc(t("connecting"))}</div>
+      <p id="status" class="status note">${esc(t("connecting"))}</p>
       <div class="meter"><div id="level"></div></div>
       <details class="sitbox" open><summary>${esc(t("situation"))}・${esc(t("todo"))}</summary>${situationHtml(sc, true)}</details>
       <div id="log" class="log"></div>
@@ -235,7 +235,9 @@ function renderTalk(sc) {
     onTurn: s => {
       const $t = document.getElementById("turn"); if (!$t) return;
       $t.className = "turn " + s;
-      $t.innerHTML = { wait: "⏳ " + bi("turnWait"), ai: "🔊 " + bi("turnAi"), you: "🎙 " + bi("turnYou"), hearing: "👂 " + bi("turnHearing") }[s];
+      const icon = { wait: "⏳", ai: "🔊", you: "🎙️", hearing: "👂" }[s];
+      $t.innerHTML = `<span class="icon">${icon}</span>` + bi({ wait: "turnWait", ai: "turnAi", you: "turnYou", hearing: "turnHearing" }[s]);
+      if (s === "you") try { navigator.vibrate?.(120); } catch {}   // Androidは短く震えて知らせる
     },
     onLevel: v => { const $l = document.getElementById("level"); if ($l) $l.style.width = Math.round(v * 100) + "%"; },
   });

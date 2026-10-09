@@ -74,7 +74,7 @@ const T = {
   connected:    { ja: "つながりました", en: "Connected", vi: "Đã kết nối" },
   turnWait:     { ja: "まって ください。AIが 話しはじめます", en: "Please wait. The AI will start talking", vi: "Hãy đợi. AI sẽ bắt đầu nói" },
   turnAi:       { ja: "AIが 話して います。聞いて ください", en: "The AI is talking. Please listen", vi: "AI đang nói. Hãy lắng nghe" },
-  turnYou:      { ja: "あなたの 番です。話して ください", en: "Your turn. Please speak", vi: "Đến lượt bạn. Hãy nói" },
+  turnYou:      { ja: "あなたの 番！ 話して ください", en: "YOUR TURN! Speak now", vi: "ĐẾN LƯỢT BẠN! Hãy nói" },
   turnHearing:  { ja: "聞いて います…（話しおわったら すこし まって）", en: "Listening… (pause a moment when you finish)", vi: "Đang nghe… (nói xong hãy dừng một chút)" },
   examTitle:    { ja: "試験たいさく", en: "Test practice", vi: "Luyện thi" },
   examNote:     { ja: "形式に あわせて 作った 練習問題です（公式の 問題では ありません）", en: "Practice questions written in the official format (not official questions)", vi: "Câu hỏi luyện tập theo định dạng chính thức (không phải đề chính thức)" },
