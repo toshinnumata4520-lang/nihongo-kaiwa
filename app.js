@@ -609,7 +609,9 @@ function examText(q) {
       `<span class="furi">${esc(q.question_furigana.split("\n").slice(1).join(" "))}</span>`;
   const raw = S.getFurigana() ? q.question_furigana : q.question_ja;
   let h = esc(raw).replace(/【(.+?)】/g, "<u>$1</u>");
-  if (S.getFurigana()) h = h.replace(/([一-龯々〆ヶ]+)\(([ぁ-んー]+)\)/g, "<ruby>$1<rt>$2</rt></ruby>");
+  // 「｜」があれば、そこから後ろの漢字だけにふりがなを付ける（例：作業｜手順(てじゅん)）。ふりがなOFFでは「｜」を消す
+  if (S.getFurigana()) h = h.replace(/(?:｜([一-龯々〆ヶ]+)|([一-龯々〆ヶ]+))\(([ぁ-んー]+)\)/g, (_, a, b, r) => `<ruby>${a || b}<rt>${r}</rt></ruby>`);
+  h = h.replace(/｜/g, "");
   return h.replace(/\n/g, "<br>");
 }
 
