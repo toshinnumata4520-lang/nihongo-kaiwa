@@ -3,7 +3,7 @@ import { SCENES } from "./scenes.js";
 import { SITUATIONS } from "./situations.js";
 import { SAFETY_RULES, mask } from "./safety.js";
 import { startConversation, stopConversation, sendNote, LIVE_MODEL } from "./live.js";
-import { makeFeedback, judgeRetry, judgeDrill, TEXT_MODEL } from "./coach.js";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, TEXT_MODEL } from "./coach.js";
 import { DRILLS, DRILL_INDUSTRIES } from "./drills.js";
 import { EXAMS } from "./exams.js";
 import * as S from "./store.js";
@@ -120,19 +120,64 @@ function phraseHtml(p) {
 
 // 状況カード：自分の立場・いま起きていること・伝えること。準備画面と会話中の両方に出す
 const loc = o => L() === "ja" ? o.ja : o[L()] || o.en;
-function situationHtml(sc, compact = false) {
+function situationHtml(sc, compact = false, hideTodo = false) {
   const s = SITUATIONS[sc.id];
   if (!s) return "";
   const both = o => `${esc(loc(o))}${L() !== "ja" ? `<span class="ja">${esc(o.ja)}</span>` : ""}`;
   return `<section class="card situation">
     ${compact ? "" : `<h2>${bi("situation")}</h2><p>${both(s.you)}</p>`}
     <p class="${compact ? "" : "big"}">${both(s.now)}</p>
-    <h2>${bi("todo")}</h2>
-    <ol class="todo">${s.todo.map(x => `<li>${both(x)}</li>`).join("")}</ol>
+    ${hideTodo ? "" : `<h2>${bi("todo")}</h2>
+    <ol class="todo">${s.todo.map(x => `<li>${both(x)}</li>`).join("")}</ol>`}
   </section>`;
 }
 
+// ───── 手助けの段階（2=えらぶ 3=うめる 4=キーワード 5=カードだけ） ─────
+const LEVELS = [{ n: 2, k: "lvChoose" }, { n: 3, k: "lvFill" }, { n: 4, k: "lvKey" }, { n: 5, k: "lvCard" }];
+const recommendLevel = sc => ({ new: 2, trying: 3, done: 4, fluent: 5 }[S.sceneStatus(sc.id)]);
+const getLevel = sc => +localStorage.getItem("nk.level." + sc.id) || recommendLevel(sc);
+const setLevel = (sc, n) => localStorage.setItem("nk.level." + sc.id, n);
+
+// 手助けの材料はAIで作り、場面ごと・言語ごとに端末へ保存して使い回す（毎回作ると原価がかかるため）
+const scafPending = {};
+function loadScaffold(sc) {
+  const ck = `nk.scaf.${sc.id}.${L()}`;
+  try { const c = JSON.parse(localStorage.getItem(ck)); if (c?.steps?.length) return Promise.resolve(c); } catch {}
+  if (!S.getKey() || !SITUATIONS[sc.id]) return Promise.resolve(null);
+  return scafPending[ck] ||= makeScaffold(S.getKey(), sc, SITUATIONS[sc.id], L())
+    .then(r => { localStorage.setItem(ck, JSON.stringify(r.result)); return r.result; })
+    .catch(e => { console.error(e); delete scafPending[ck]; return null; });
+}
+
+function supportHtml(scaf, level) {
+  if (level >= 5 || !scaf) return "";
+  return `<section class="card support"><h2>${bi(LEVELS.find(x => x.n === level).k)}</h2><ol class="steps">${scaf.steps.map((st, i) => {
+    if (level === 2) {
+      const opts = [st.full, ...st.wrong.slice(0, 2)].sort(() => Math.random() - .5);
+      return `<li>${opts.map(o => `<button class="opt" data-step="${i}" data-ok="${o === st.full ? 1 : 0}">${esc(o)}</button>`).join("")}
+        <span class="optres" id="optres${i}"></span></li>`;
+    }
+    const body = level === 3 ? `<span class="jp">${esc(st.skeleton)}</span>`
+      : `<span class="kw">${st.keywords.map(k => `<span class="chip">${esc(k)}</span>`).join("")}</span>`;
+    return `<li>${body}<details><summary class="note">${esc(t("showAnswer"))}</summary>
+      <span class="jp">${sayBtn(st.full)}${esc(st.full)}</span>${S.getFurigana() ? `<span class="furi">${esc(st.furigana)}</span>` : ""}<span class="tr">${esc(st.meaning)}</span></details></li>`;
+  }).join("")}</ol></section>`;
+}
+
+function wireSupport(scaf) {
+  $app.querySelectorAll(".opt").forEach(b => b.onclick = () => {
+    const i = +b.dataset.step, st = scaf.steps[i];
+    $app.querySelectorAll(`.opt[data-step="${i}"]`).forEach(x => x.classList.toggle("right", x.dataset.ok === "1"));
+    if (b.dataset.ok !== "1") b.classList.add("wrong");
+    const r = document.getElementById("optres" + i);
+    r.innerHTML = `${b.dataset.ok === "1" ? "✅" : "🔁"} ${S.getFurigana() ? `<span class="furi">${esc(st.furigana)}</span>` : ""}<span class="tr">${esc(st.meaning)}</span>`;
+  });
+  $app.querySelectorAll(".support [data-say]").forEach(b => b.onclick = () => say(b.dataset.say));
+}
+
 function renderPrep(sc) {
+  loadScaffold(sc);   // 会話を始める前に、手助けの材料を先に作っておく
+  const lv = getLevel(sc), rec = recommendLevel(sc);
   show(`
     <button class="back link">← ${esc(t("home"))}</button>
     <h1>${esc(sceneTitle(sc))}</h1>
@@ -147,15 +192,27 @@ function renderPrep(sc) {
         <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${esc(t("furigana"))}</label></div>
       <ul class="phrases">${sc.key_phrases.map(phraseHtml).join("")}</ul>
     </section>
+    <section class="card">
+      <h2>${bi("levelTitle")}</h2>
+      <div class="levels">${LEVELS.map(x => `<button class="choice lv ${x.n === lv ? "on" : ""}" data-lv="${x.n}">${esc(t(x.k))}${x.n === rec ? `<small>★${esc(t("recommended"))}</small>` : ""}</button>`).join("")}</div>
+      <p class="note">${esc(t(LEVELS.find(x => x.n === lv).k + "Note"))}</p>
+    </section>
     <button id="start" class="primary big">${bi("start")}</button>`);
   $app.querySelector(".back").onclick = renderHome;
+  $app.querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { setLevel(sc, +b.dataset.lv); renderPrep(sc); });
   document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderPrep(sc); };
   document.getElementById("start").onclick = () => renderTalk(sc);
 }
 
 // ───── 本番の会話 ─────
-function systemFor(sc) {
+function systemFor(sc, level) {
   const nick = S.getProfile()?.nickname || "学習者";
+  const levelRule = {
+    2: "学習者は画面の3つの候補から文を選んで言う、いちばんやさしい段階。とてもゆっくり、短く話し、「やること」の順番どおりに会話を進める。予想外の質問はしない。",
+    3: "学習者は画面の穴うめの文を見ながら話す段階。ゆっくり話し、「やること」の順番どおりに進める。",
+    4: "学習者はキーワードだけを見て自分で文を作る段階。ふつうより少しゆっくり話す。言い方を少し変えたり、質問を1つ足したりしてよい。",
+    5: "学習者は状況カードだけで話すいちばん上の段階。ふつうの速さで話す。途中で、状況に合った予想外のこと（例：「今、手が離せない」「その時間だと困る」）を1つだけ混ぜる。",
+  }[level] || "";
   const s = SITUATIONS[sc.id];
   const langName = { ja: "やさしい日本語", en: "英語", vi: "ベトナム語" }[L()] || "英語";
   return `${SAFETY_RULES}
@@ -175,6 +232,9 @@ ${s ? `学習者に見せている状況: ${s.you.ja} ${s.now.ja}
 - 学習者が何を言えばいいか分からず黙ったり「わからない」と言ったら、まだできていない「やること」の次の1つを、やさしい日本語で短く教える。2回目も伝わらなければ${langName}で一言だけ説明する。
 - 小さな文法の間違いは会話の中では直さない（あとで直す）。場面に合っていない内容のときだけ指摘する。
 
+# 今回の手助けの段階
+${levelRule}
+
 # 話し方
 - 日本語だけで話す。学習者に合わせて、短い文で、少しゆっくり話す。1回に1つだけ質問する。
 - 学習者の間違いは、会話の中では直さない（あとで別に直す）。意味が分からないときだけ聞き返す。
@@ -189,13 +249,15 @@ function renderTalk(sc) {
   const transcript = [];          // { who, text }
   const usage = [];               // Live の usageMetadata（原価の実測用）
   let hintIdx = 0, timer = null, finished = false;
+  const level = getLevel(sc);
   show(`
     <div class="talk">
       <div class="row between"><h1>${esc(sceneTitle(sc))}</h1><span id="clock" class="clock">5:00</span></div>
       <div id="turn" class="turn wait"><span class="icon">⏳</span>${esc(t("connecting"))}</div>
       <p id="status" class="status note">${esc(t("connecting"))}</p>
       <div class="meter"><div id="level"></div></div>
-      <details class="sitbox" open><summary>${esc(t("situation"))}・${esc(t("todo"))}</summary>${situationHtml(sc, true)}</details>
+      <details class="sitbox" open><summary>${esc(t("situation"))}${level < 5 ? "・" + esc(t("todo")) : ""}</summary>${situationHtml(sc, true, level >= 5)}</details>
+      <div id="support"></div>
       <div id="log" class="log"></div>
       <p id="hintText" class="hinttext" hidden></p>
       <div class="row">
@@ -214,9 +276,13 @@ function renderTalk(sc) {
     $log.scrollTop = $log.scrollHeight;
   };
   const statusText = { listening: "connected", "mic-denied": "micDenied", "time-up": "timeUp", closed: "error" };
+  loadScaffold(sc).then(scaf => {
+    const $s = document.getElementById("support");
+    if ($s && scaf) { $s.innerHTML = supportHtml(scaf, level); wireSupport(scaf); }
+  });
 
   startConversation({
-    key, systemText: systemFor(sc),
+    key, systemText: systemFor(sc, level),
     openingText: "（練習を始めます。あなたの最初の一言から話してください）",
     onText: (who, text, done) => {
       if (text) add(who, text);
@@ -286,7 +352,7 @@ async function renderFeedback(sc, transcript, seconds, liveUsage) {
       fb = r.result; textUsage = r.usage;
     }
   } catch (e) { console.error(e); failed = true; }
-  S.addSession({ scene: sc.id, at: new Date().toISOString(), seconds: Math.round(seconds), transcript, feedback: fb,
+  S.addSession({ scene: sc.id, level: getLevel(sc), at: new Date().toISOString(), seconds: Math.round(seconds), transcript, feedback: fb,
     usage: { live: liveUsage, text: textUsage }, models: { live: LIVE_MODEL, text: TEXT_MODEL } });
 
   if (!fb) {

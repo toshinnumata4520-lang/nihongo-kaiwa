@@ -53,6 +53,33 @@ ${lines || "（会話なし）"}
   return generate(key, prompt, schema);
 }
 
+// 会話の手助け（段階）の材料：「やること」1つずつに、全文・骨組み・キーワード・まちがいの選択肢を作る
+export function makeScaffold(key, scene, situation, lang) {
+  const prompt = `外国人の日本語学習者（目安 ${scene.level}）が、次のロールプレイで言う文の練習材料を作ってください。
+場面: ${scene.title_ja}
+相手の役: ${scene.ai_role}
+学習者の状況: ${situation.you.ja} ${situation.now.ja}
+学習者がやること（順番）: ${situation.todo.map((x, i) => `${i + 1}. ${x.ja}`).join(" / ")}
+参考の表現: ${scene.key_phrases.map(p => p.ja).join(" / ")}
+
+やること1つずつに:
+- full: この状況で学習者が言う、自然で丁寧な1文（短く。状況の人名・時間・数字に合わせる）
+- furigana: full の全文ひらがな
+- skeleton: full の大事な部分（数字・場所・動詞など2〜3か所）を「＿＿」にした文
+- keywords: 言うときのヒントになる語を2〜4個（日本語）
+- wrong: full と似ているが、この場面では不適切な文を2つ（丁寧さが足りない、内容が状況と違う、文法がおかしい など。理由が分かる程度に）
+- meaning: full の意味を${{ ja: "English", en: "English", vi: "Vietnamese" }[lang] || "English"}で`;
+  const schema = {
+    type: "OBJECT",
+    properties: { steps: { type: "ARRAY", items: { type: "OBJECT", properties: {
+      full: { type: "STRING" }, furigana: { type: "STRING" }, skeleton: { type: "STRING" },
+      keywords: { type: "ARRAY", items: { type: "STRING" } }, wrong: { type: "ARRAY", items: { type: "STRING" } }, meaning: { type: "STRING" },
+    }, required: ["full", "furigana", "skeleton", "keywords", "wrong", "meaning"] } } },
+    required: ["steps"],
+  };
+  return generate(key, prompt, schema);
+}
+
 // 「聞いて くりかえす」の判定：復唱に必要な情報が入っているか、足りない指示では聞き返せたか
 export function judgeDrill(key, drill, said, lang) {
   const isAsk = drill.kind === "ask";
