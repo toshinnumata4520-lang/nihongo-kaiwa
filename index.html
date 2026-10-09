@@ -7,6 +7,27 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<script>
+// LINE・Instagram・Facebook などのアプリ内ブラウザでは、Googleのログイン画面から戻れず真っ白になる。
+// LINE は ?openExternalBrowser=1 を付けると Safari / Chrome で開き直すので、自動で切り替える。
+(function () {
+  var ua = navigator.userAgent;
+  if (/\bLine\//i.test(ua) && !/openExternalBrowser=1/.test(location.search)) {
+    location.replace(location.pathname + (location.search ? location.search + "&" : "?") + "openExternalBrowser=1" + location.hash);
+    return;
+  }
+  if (/FBAN|FBAV|Instagram|\bLine\//i.test(ua)) {
+    document.addEventListener("DOMContentLoaded", function () {
+      var d = document.createElement("div");
+      d.className = "inapp";
+      d.innerHTML = "⚠ この画面は アプリの中の ブラウザです。Safari か Chrome で 開いて ください。<br><small>Please open this page in Safari or Chrome. / Hãy mở trang này bằng Safari hoặc Chrome.</small>" +
+        '<br><button id="copyurl">URLを コピー / Copy URL</button>';
+      document.body.prepend(d);
+      document.getElementById("copyurl").onclick = function () { navigator.clipboard && navigator.clipboard.writeText(location.origin + location.pathname); this.textContent = "✓"; };
+    });
+  }
+})();
+</script>
 <main id="app"></main>
 <script type="module" src="app.js"></script>
 </body>
