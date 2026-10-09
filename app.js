@@ -294,6 +294,14 @@ async function renderFeedback(sc, transcript, seconds, liveUsage) {
       <p class="why">${esc(why)}</p>
       ${L() !== "ja" ? `<p class="ja">${esc(f.why_ja)}</p>` : ""}
     </section>
+    ${(fb.model_lines || []).length ? `<section class="card">
+      <h2>${bi("correctJa")}</h2>
+      <ol class="model">${fb.model_lines.map(m => `<li>
+        ${m.said ? `<span class="said">${esc(t("youSaid"))}：${esc(m.said)}</span>` : `<span class="said">${esc(t("missing"))}</span>`}
+        <span class="jp">${sayBtn(m.correct)}${esc(m.correct)}</span>
+        ${S.getFurigana() ? `<span class="furi">${esc(m.furigana)}</span>` : ""}
+      </li>`).join("")}</ol>
+    </section>` : ""}
     <button id="retry" class="primary big">🎙 ${bi("retry")}</button>
     <button id="home" class="link">${esc(t("home"))}</button>`);
   document.getElementById("home").onclick = renderHome;

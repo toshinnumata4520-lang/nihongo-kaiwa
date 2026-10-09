@@ -71,6 +71,8 @@ const T = {
   goalShort:    { ja: "目標", en: "Goal", vi: "Mục tiêu" },
   export:       { ja: "きろくを ダウンロード", en: "Download records", vi: "Tải lịch sử" },
   deleteRecords:{ ja: "きろくを ぜんぶ けす", en: "Delete all records", vi: "Xóa toàn bộ lịch sử" },
+  correctJa:    { ja: "正しい 日本語（ぜんぶ）", en: "Correct Japanese (all your lines)", vi: "Tiếng Nhật đúng (tất cả câu của bạn)" },
+  missing:      { ja: "（言えなかった 大事な 一言）", en: "(An important line you didn't say)", vi: "(Câu quan trọng bạn chưa nói)" },
   drillTitle:   { ja: "聞いて くりかえす", en: "Listen and repeat back", vi: "Nghe và nhắc lại" },
   drillNote:    { ja: "しごとの 指示を 聞いて、くりかえして 確かめる 練習。わからない ときは 聞き返そう", en: "Hear a work instruction and repeat it back to confirm. If something is unclear, ask.", vi: "Nghe chỉ thị công việc và nhắc lại để xác nhận. Nếu không rõ, hãy hỏi lại." },
   drillTask:    { ja: "指示を 聞いて、くりかえして 確かめて ください。たりない ことが あれば 聞き返して ください。", en: "Listen, then repeat the instruction to confirm. If information is missing, ask about it.", vi: "Nghe rồi nhắc lại chỉ thị để xác nhận. Nếu thiếu thông tin, hãy hỏi lại." },

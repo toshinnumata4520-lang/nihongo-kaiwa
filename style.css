@@ -61,6 +61,10 @@ label { display: block; }
 .note { font-size: 13px; color: var(--sub); }
 .drillentry { border-color: var(--accent); }
 .tag { display: inline-block; font-size: 12px; margin-left: 8px; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); vertical-align: middle; }
+.model { padding-left: 22px; margin: 0; }
+.model li { padding: 8px 0; border-top: 1px solid var(--line); }
+.model li:first-child { border-top: none; }
+.model .said { display: block; font-size: 14px; }
 .checks { list-style: none; padding: 0; margin: 6px 0; }
 .situation { background: #eef3fb; border-color: #c9d6ea; }
 .todo { margin: 4px 0 0; padding-left: 22px; }
