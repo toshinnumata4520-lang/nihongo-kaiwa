@@ -1,15 +1,15 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610111611";
-import { SCENES } from "./scenes.js?v=202610111611";
-import { SITUATIONS } from "./situations.js?v=202610111611";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610111611";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610111611";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610111611";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610111611";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610111611";
-import { EXAMS } from "./exams.js?v=202610111611";
-import { RUBY } from "./ruby.js?v=202610111611";
-import * as S from "./store.js?v=202610111611";
-import { autoSetup, preloadGis } from "./setup.js?v=202610111611";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610130619";
+import { SCENES } from "./scenes.js?v=202610130619";
+import { SITUATIONS } from "./situations.js?v=202610130619";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610130619";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610130619";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610130619";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610130619";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610130619";
+import { EXAMS } from "./exams.js?v=202610130619";
+import { RUBY } from "./ruby.js?v=202610130619";
+import * as S from "./store.js?v=202610130619";
+import { autoSetup, preloadGis } from "./setup.js?v=202610130619";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -38,7 +38,9 @@ const playingSources = new Set();
 let currentRec = null;
 let activeTalkFinish = null;
 let voiceAbort = new AbortController();   // 作りかけの声（liveSpeak）を、画面の切り替えで止める
-try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch {}   // iPhoneの消音スイッチがオンでも鳴らす（iOS 17以降）
+// iPhone（iOS 17以降）の音の扱い。「playback」は消音スイッチがオンでも鳴るが、マイクが使えなくなる。
+// そのため、声を流すときだけ playback、マイクを使うときは play-and-record に切り替える
+const audioMode = t => { try { if (navigator.audioSession && navigator.audioSession.type !== t) navigator.audioSession.type = t; } catch {} };
 // 音を鳴らす AudioContext は1つだけにする（iPhoneは同時に作れる数に上限がある）
 let audioCtx = null;
 const getCtx = () => (audioCtx ||= new (window.AudioContext || window.webkitAudioContext)());
@@ -59,6 +61,7 @@ function stopAllAudio() {
 function playBuffer(buf, token) {
   if (token !== playToken) return;   // 声ができる前に画面が変わった・別の声を頼まれたら鳴らさない
   stopPlayback();
+  if (!activeTalkFinish) audioMode("playback");   // 会話中はマイクを使っているので切り替えない
   const ctx = getCtx();
   const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination);
   playingSources.add(src); src.onended = () => playingSources.delete(src);
@@ -131,6 +134,7 @@ async function say(text, reading = "") {
 function sayLocal(text, rate = 0.85) {
   if (!window.speechSynthesis) return;
   stopPlayback();
+  if (!activeTalkFinish) audioMode("playback");
   const u = new SpeechSynthesisUtterance(text); u.lang = "ja-JP"; u.rate = rate;
   const v = jaVoice(); if (v) u.voice = v;
   muteFor(text.length * 250 / rate + 800);
@@ -523,7 +527,8 @@ function renderTalk(sc) {
     stopConversation();
     console.warn("talk stopped", msgKey, detail);
     // 学習者には英語の生エラーを見せない。キーの誤りだけは分かるように言いかえる
-    setStatus(/API key/i.test(detail || "") ? t("keyInvalid") : t(msgKey), true);
+    setStatus((/API key/i.test(detail || "") ? t("keyInvalid") : t(msgKey)) + (detail && !/API key/i.test(detail) ? `（${String(detail).slice(0, 40)}）` : ""), true);
+    if (msgKey === "micDenied") $status.insertAdjacentHTML("afterend", `<p class="note micHelp">${tx("micHelp")}</p>`);
     const $t = document.getElementById("turn"); if ($t) { $t.className = "turn wait"; $t.innerHTML = `<span class="icon">⚠️</span>${esc(t(msgKey))}`; }
     document.getElementById("endrow").innerHTML = `<div class="row"><button id="again" class="primary">🔁 ${tx("reconnect")}</button><button id="home" class="sub">${tx("home")}</button></div>`;
     document.getElementById("again").onclick = () => renderTalk(sc);
@@ -552,6 +557,7 @@ function renderTalk(sc) {
   }
 
   activeTalkFinish = finish;
+  audioMode("play-and-record");   // マイクを使う前に（playback のままだと iPhone でマイクが使えない）
   startConversation({
     key, systemText: systemFor(sc, level),
     openingText: "（練習を始めます。あなたの最初の一言から話してください）",
@@ -695,6 +701,7 @@ function listenOnce($btn) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return Promise.resolve(null);
   stopPlayback();   // 指示の声を流したまま聞き取ると、その声を学習者の発言として拾ってしまう
+  audioMode("play-and-record");
   try { currentRec?.abort(); } catch {}   // 前の聞き取りが残っていたら止める（同時に1つしか動かせない）
   const label = $btn?.innerHTML;
   return new Promise(resolve => {

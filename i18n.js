@@ -1,4 +1,4 @@
-import { EXTRA } from "./lang_extra.js?v=202610111611";
+import { EXTRA } from "./lang_extra.js?v=202610130619";
 // 画面の言葉。日本語は「やさしい日本語」。ベトナム語は仮訳（教材担当の確認待ち）。
 const T = {
   appName:      { ja: "しごとの日本語れんしゅう", en: "Work Japanese Practice", vi: "Luyện tiếng Nhật công việc" },
@@ -43,6 +43,7 @@ const T = {
   rulesQuiz:    { ja: "この 場面の クイズ", en: "Quiz for this scene", vi: "Câu đố cho tình huống này" },
   rulesQuizAll: { ja: "ぜんぶから クイズ（10問）", en: "Quiz from all scenes (10)", vi: "Câu đố tất cả (10 câu)" },
   rulesWhy:     { ja: "なぜ？", en: "Why?", vi: "Tại sao?" },
+  micHelp:      { ja: "iPhoneの場合：画面の下（または上）のアドレスの左にある「ぁあ」→「Webサイトの設定」→「マイク」を「許可」にして、もう一度つないでください。だめなときは、iPhoneの「設定」→「アプリ」→「Safari」→「マイク」を「確認」にしてください。", en: "On iPhone: tap “aA” next to the address → Website Settings → Microphone → Allow, then connect again. If that doesn't work: Settings → Apps → Safari → Microphone → Ask.", vi: "Trên iPhone: chạm “aA” cạnh địa chỉ → Cài đặt trang web → Micrô → Cho phép, rồi kết nối lại. Nếu vẫn không được: Cài đặt → Ứng dụng → Safari → Micrô → Hỏi." },
   connLost:     { ja: "つながりが 切れました", en: "The connection was lost", vi: "Mất kết nối" },
   reconnect:    { ja: "もう一度 つなぐ", en: "Connect again", vi: "Kết nối lại" },
   startFailed:  { ja: "この ブラウザでは 会話を はじめられません。Safari か Chrome で ひらいて ください", en: "Couldn't start the conversation in this browser. Please open it in Safari or Chrome", vi: "Không bắt đầu được hội thoại trên trình duyệt này. Hãy mở bằng Safari hoặc Chrome" },
