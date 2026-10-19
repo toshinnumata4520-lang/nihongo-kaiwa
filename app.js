@@ -1,16 +1,16 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610190700";
-import { SCENES } from "./scenes.js?v=202610190700";
-import { SITUATIONS } from "./situations.js?v=202610190700";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610190700";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610190700";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610190700";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610190700";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610190700";
-import { EXAMS } from "./exams.js?v=202610190700";
-import { RUBY } from "./ruby.js?v=202610190700";
-import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610190700";
-import * as S from "./store.js?v=202610190700";
-import { autoSetup, preloadGis } from "./setup.js?v=202610190700";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610190710";
+import { SCENES } from "./scenes.js?v=202610190710";
+import { SITUATIONS } from "./situations.js?v=202610190710";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610190710";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610190710";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610190710";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610190710";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610190710";
+import { EXAMS } from "./exams.js?v=202610190710";
+import { RUBY } from "./ruby.js?v=202610190710";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610190710";
+import * as S from "./store.js?v=202610190710";
+import { autoSetup, preloadGis } from "./setup.js?v=202610190710";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -105,10 +105,16 @@ function show(html) {
   playToken++;
   stopAllAudio();
   if (activeTalkFinish) { const f = activeTalkFinish; activeTalkFinish = null; f(true); }   // 会話中に画面が変わったら会話を閉じる
+  rememberHome();
   document.body.classList.remove("hastabs");
   $app.innerHTML = html; window.scrollTo(0, 0);
   wireSay($app);
 }
+// 同じ画面を描き直すとき（ふりがな・言語・レベルの切り替えなど）は、見ていた位置のままにする
+const stay = f => { const y = window.scrollY; f(); window.scrollTo(0, y); };
+// ホームはタブごとに見ていた位置をおぼえておき、もどったときにそこへ戻す
+const homeY = {};
+function rememberHome() { if (document.body.classList.contains("hastabs")) homeY[currentTab] = window.scrollY; }
 const wireSay = root => root.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
 // アプリを閉じた・別のアプリに切り替えたときも止める
 document.addEventListener("visibilitychange", () => {
@@ -178,7 +184,7 @@ function renderSetup() {
       <label class="check"><input type="checkbox" id="agree"> ${bi("agreeCheck")}</label>
       <button id="go" class="primary" disabled>${bi("agree")}</button>
     </section>`);
-  $app.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => { setLang(b.dataset.lang); renderSetup(); });
+  $app.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => { setLang(b.dataset.lang); stay(renderSetup); });
   const chk = () => { document.getElementById("go").disabled = !(age18.checked && agree.checked && nick.value.trim()); };
   const age18 = document.getElementById("age18"), agree = document.getElementById("agree"), nick = document.getElementById("nick");
   [age18, agree].forEach(e => e.onchange = chk); nick.oninput = chk;
@@ -263,6 +269,7 @@ function nextScene() {
 
 function renderHome(tab) {
   if (typeof tab !== "string") tab = currentTab;   // 「← ホームへ」から呼ばれたときは、前にいたタブへ戻る
+  rememberHome(); document.body.classList.remove("hastabs");
   currentTab = tab;
   try { localStorage.setItem("nk.tab", tab); } catch {}
   const due = S.dueCards().length;
@@ -317,7 +324,7 @@ function renderHome(tab) {
     <section class="card">
       <h2>🔤 ${bi("vocabTitle")}</h2>
       <p class="note">${tx("vocabNote")}</p>
-      <div class="row">${VGROUPS.map(g => `<button class="choice cat ${g.key === vgroup().key ? "on" : ""}" data-vg="${g.key}">${esc(g.label)}</button>`).join("")}</div>
+      <div class="row vgs">${VGROUPS.map(g => `<button class="choice cat ${g.key === vgroup().key ? "on" : ""}" data-vg="${g.key}">${esc(g.label)}</button>`).join("")}</div>
       <div class="row"><button class="choice" id="vlist">📖 ${tx("vocabList")}</button>
         ${VOCAB_MODES.map(m => `<button class="choice" data-vmode="${m}">${tx("v_" + m)}</button>`).join("")}</div>
     </section>`;
@@ -331,6 +338,7 @@ function renderHome(tab) {
     ${body}
     <nav class="tabbar">${TABS.map(x => `<button class="tab ${x.id === tab ? "on" : ""}" data-tab="${x.id}"><span class="ticon">${x.icon}</span><span>${esc(t(x.k))}</span></button>`).join("")}</nav>`);
   document.body.classList.add("hastabs");
+  window.scrollTo(0, homeY[tab] || 0);
   $app.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => renderHome(b.dataset.tab));
   $app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => renderHome(b.dataset.go));
   $app.querySelectorAll(".scene").forEach(b => b.onclick = () => renderPrep(SCENES.find(s => s.id === b.dataset.id)));
@@ -451,8 +459,8 @@ function renderPrep(sc) {
     </section>
     <div class="stickybar"><button id="start" class="primary big">${S.getKey() ? "" : "🔒 "}${bi("start")}</button></div>`);
   $app.querySelector(".back").onclick = renderHome;
-  $app.querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { setLevel(sc, +b.dataset.lv); renderPrep(sc); });
-  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderPrep(sc); };
+  $app.querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { setLevel(sc, +b.dataset.lv); stay(() => renderPrep(sc)); });
+  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); stay(() => renderPrep(sc)); };
   document.getElementById("start").onclick = () => renderTalk(sc);
 }
 
@@ -1019,7 +1027,7 @@ function renderVocabList() {
     </section>`).join("")}`);
   $app.querySelector(".back").onclick = () => renderHome("exam");
   $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
-  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderVocabList(); };
+  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); stay(renderVocabList); };
 }
 
 // 仕事の試験の一問一答は問題が多いので、分野を選んでから解く（全部からでもよい）
@@ -1085,7 +1093,7 @@ function renderExamQ(set, qs, i, results) {
     document.getElementById("selfng").onclick = () => go(false);
   };
   $app.querySelector(".back").onclick = renderHome;
-  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderExamQ(set, qs, i, results); };
+  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); stay(() => renderExamQ(set, qs, i, results)); };
   const $play = document.getElementById("play");
   if ($play) { if (q.plays >= 2) $play.disabled = true; $play.onclick = () => { if (q.plays >= 2) return; q.plays++; playScript(q.script); if (q.plays >= 2) $play.disabled = true; }; }
   $app.querySelectorAll(".ans").forEach(b => b.onclick = () => {
@@ -1193,7 +1201,7 @@ function renderSettings() {
       ${LANGS.map(([v, n]) => `<button class="choice ${L() === v ? "on" : ""}" data-lang="${v}">${n}</button>`).join("")}
     </div></section>`);
   $app.querySelector(".back").onclick = renderHome;
-  $app.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => { setLang(b.dataset.lang); renderSettings(); });
+  $app.querySelectorAll("[data-lang]").forEach(b => b.onclick = () => { setLang(b.dataset.lang); stay(renderSettings); });
   // ニックネーム：AIはこの名前で呼ぶ
   document.getElementById("saveNick").onclick = () => {
     const v = document.getElementById("nickEdit").value.trim();
