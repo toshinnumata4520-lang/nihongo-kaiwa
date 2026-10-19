@@ -1,17 +1,17 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610191034";
-import { SCENES } from "./scenes.js?v=202610191034";
-import { SITUATIONS } from "./situations.js?v=202610191034";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610191034";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610191034";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610191034";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610191034";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610191034";
-import { EXAMS } from "./exams.js?v=202610191034";
-import { RUBY } from "./ruby.js?v=202610191034";
-import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610191034";
-import * as VM from "./vmaster.js?v=202610191034";
-import * as S from "./store.js?v=202610191034";
-import { autoSetup, preloadGis } from "./setup.js?v=202610191034";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610191503";
+import { SCENES } from "./scenes.js?v=202610191503";
+import { SITUATIONS } from "./situations.js?v=202610191503";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610191503";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610191503";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610191503";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610191503";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610191503";
+import { EXAMS } from "./exams.js?v=202610191503";
+import { RUBY } from "./ruby.js?v=202610191503";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610191503";
+import * as VM from "./vmaster.js?v=202610191503";
+import * as S from "./store.js?v=202610191503";
+import { autoSetup, preloadGis } from "./setup.js?v=202610191503";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -25,7 +25,7 @@ const L = () => getLang();
 // JLPT 単語は、レベルごとに20語ずつの「組」に分けて練習する（例：N5 ①＝1〜20語目）
 const VGROUPS = [...new Set(VOCAB.map(v => v.level))].flatMap(lv => {
   const ws = VOCAB.filter(v => v.level === lv), out = [];
-  for (let i = 0; i < ws.length; i += 20) out.push({ key: `${lv}-${i / 20 + 1}`, level: lv, n: i / 20 + 1, label: `${lv} ${"①②③④⑤⑥⑦⑧⑨⑩"[i / 20] || i / 20 + 1}（${i + 1}〜${i + Math.min(20, ws.length - i)}）`, words: ws.slice(i, i + 20) });
+  for (let i = 0; i < ws.length; i += 20) out.push({ key: `${lv}-${i / 20 + 1}`, level: lv, n: i / 20 + 1, label: `${lv}-${i / 20 + 1}（${i + 1}〜${i + Math.min(20, ws.length - i)}）`, words: ws.slice(i, i + 20) });
   return out;
 });
 const VLEVELS = [...new Set(VOCAB.map(v => v.level))];
