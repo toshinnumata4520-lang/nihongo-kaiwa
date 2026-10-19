@@ -167,3 +167,26 @@ header.top .settingsbtn { padding: 8px 10px; min-height: 44px; }
 .manner p { margin: 8px 0; line-height: 1.7; }
 /* JLPT 単語の組（N5 ① など）は小さく横にならべる */
 .vgs .choice { padding: 6px 10px; font-size: 14px; min-height: 0; flex: 0 0 auto; }
+/* JLPT 単語マスター */
+.gauge { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 6px 0; }
+.gauge span { display: block; height: 100%; background: var(--ok, #2e7d32); }
+.vmstage { display: block; width: 100%; text-align: left; }
+.vmstage:disabled { opacity: .5; }
+.vmsteps { display: grid; gap: 8px; }
+.vmsteps .choice { text-align: left; }
+.vmsteps small { display: block; font-size: 12px; }
+.vmlist { display: flex; flex-wrap: wrap; gap: 6px; }
+.vmw { display: inline-block; padding: 2px 8px; border-radius: 10px; background: #e6e6e6; font-size: 14px; }
+.vmw.s1 { background: #fff1b8; }
+.vmw.s2 { background: var(--ok-soft, #dff3e2); }
+.vmq { text-align: center; }
+.vmword { font-size: 44px; font-weight: bold; margin: 8px 0; }
+.vmword rt { font-size: 16px; }
+.vmgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.vmgrid .ans { font-size: 14px; padding: 10px 6px; text-align: center; min-height: 56px; }
+.vmtimer { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.vmtimer span { display: block; height: 100%; width: 100%; background: var(--accent, #b5501e); transition-property: width; transition-timing-function: linear; }
+.vmtimer span.go { width: 0; }
+.vmw.s3 { background: #c8e6c9; font-weight: bold; }
+.vmmean { font-size: 26px; font-weight: bold; margin: 12px 0; }
+.vmgrid .ans ruby rt { font-size: 11px; }

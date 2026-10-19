@@ -1,16 +1,17 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610190710";
-import { SCENES } from "./scenes.js?v=202610190710";
-import { SITUATIONS } from "./situations.js?v=202610190710";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610190710";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610190710";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610190710";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610190710";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610190710";
-import { EXAMS } from "./exams.js?v=202610190710";
-import { RUBY } from "./ruby.js?v=202610190710";
-import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610190710";
-import * as S from "./store.js?v=202610190710";
-import { autoSetup, preloadGis } from "./setup.js?v=202610190710";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610191034";
+import { SCENES } from "./scenes.js?v=202610191034";
+import { SITUATIONS } from "./situations.js?v=202610191034";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610191034";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610191034";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610191034";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610191034";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610191034";
+import { EXAMS } from "./exams.js?v=202610191034";
+import { RUBY } from "./ruby.js?v=202610191034";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610191034";
+import * as VM from "./vmaster.js?v=202610191034";
+import * as S from "./store.js?v=202610191034";
+import { autoSetup, preloadGis } from "./setup.js?v=202610191034";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -24,10 +25,11 @@ const L = () => getLang();
 // JLPT 単語は、レベルごとに20語ずつの「組」に分けて練習する（例：N5 ①＝1〜20語目）
 const VGROUPS = [...new Set(VOCAB.map(v => v.level))].flatMap(lv => {
   const ws = VOCAB.filter(v => v.level === lv), out = [];
-  for (let i = 0; i < ws.length; i += 20) out.push({ key: `${lv}-${i / 20 + 1}`, label: `${lv} ${"①②③④⑤⑥⑦⑧⑨⑩"[i / 20] || i / 20 + 1}（${i + 1}〜${i + Math.min(20, ws.length - i)}）`, words: ws.slice(i, i + 20) });
+  for (let i = 0; i < ws.length; i += 20) out.push({ key: `${lv}-${i / 20 + 1}`, level: lv, n: i / 20 + 1, label: `${lv} ${"①②③④⑤⑥⑦⑧⑨⑩"[i / 20] || i / 20 + 1}（${i + 1}〜${i + Math.min(20, ws.length - i)}）`, words: ws.slice(i, i + 20) });
   return out;
 });
-const vgroup = () => { let k; try { k = localStorage.getItem("nk.vgroup"); } catch {} return VGROUPS.find(g => g.key === k) || VGROUPS[0]; };
+const VLEVELS = [...new Set(VOCAB.map(v => v.level))];
+const levelMastered = lv => VOCAB.filter(v => v.level === lv && VM.stars(v.id) >= 2).length;   // ★2（おぼえた）以上
 
 // ふりがな：「漢字(よみ)」の形を <ruby> にする。「｜」があれば、そこから後ろだけに付ける（例：｜3日(みっか)）
 const rubyHtml = s => esc(s).replace(/(?:｜([0-9０-９一-龯々〆ヶ]+)|([一-龯々〆ヶ]+))\(([ぁ-んー]+)\)/g, (_, a, b, r) => `<ruby>${a || b}<rt>${r}</rt></ruby>`).replace(/｜/g, "");
@@ -324,9 +326,8 @@ function renderHome(tab) {
     <section class="card">
       <h2>🔤 ${bi("vocabTitle")}</h2>
       <p class="note">${tx("vocabNote")}</p>
-      <div class="row vgs">${VGROUPS.map(g => `<button class="choice cat ${g.key === vgroup().key ? "on" : ""}" data-vg="${g.key}">${esc(g.label)}</button>`).join("")}</div>
-      <div class="row"><button class="choice" id="vlist">📖 ${tx("vocabList")}</button>
-        ${VOCAB_MODES.map(m => `<button class="choice" data-vmode="${m}">${tx("v_" + m)}</button>`).join("")}</div>
+      <div class="row">${VLEVELS.map(lv => `<button class="choice" data-vlv="${lv}">${esc(lv)}<small class="note">　${tx("vmS2")} ${levelMastered(lv)}/${VOCAB.filter(v => v.level === lv).length}${VM.levelState(lv).cert ? " 🎖" : ""}</small></button>`).join("")}</div>
+      <p class="note">${tx("vmToday")}：${VM.todayCount()}</p>
     </section>`;
   }
   show(`
@@ -348,10 +349,7 @@ function renderHome(tab) {
     new Set(EXAMS.filter(set.filter).map(q => q.section)).size > 1 && set.group ? renderExamCats(set) : startExam(set);
   });
   document.getElementById("review")?.addEventListener("click", renderReview);
-  document.getElementById("vlist")?.addEventListener("click", renderVocabList);
-  $app.querySelectorAll("[data-vmode]").forEach(b => b.onclick = () =>
-    startExam({ name: `${t("vocabShort")} ${vgroup().label}：${t("v_" + b.dataset.vmode)}`, items: vgroup().words.map(v => vocabItem(v, b.dataset.vmode, L())) }));
-  $app.querySelectorAll("[data-vg]").forEach(b => b.onclick = () => { try { localStorage.setItem("nk.vgroup", b.dataset.vg); } catch {} renderHome("exam"); });
+  $app.querySelectorAll("[data-vlv]").forEach(b => b.onclick = () => renderVmLevel(b.dataset.vlv));
   $app.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => { currentRuleCat = b.dataset.cat; renderHome("rules"); });
   const $qc = document.getElementById("quizCat");
   if ($qc) {
@@ -1011,23 +1009,179 @@ function playScript(script) {
   }
 }
 
-// JLPT 単語の一覧：語・読み・意味と、例文2つ（くらし・仕事）を聞いて読む
-function renderVocabList() {
-  const furi = S.getFurigana();
+// ───── JLPT 単語（ユニットごとに★を集める）─────
+// レベル → ユニット（20語）→ おぼえる（一覧）→ 練習（まちがえた語だけ、全部正解するまで）→ ★チェック（日をあけて正解すると★が上がる）
+// → ユニットチェック（★2以上が8割で受けられる・9割で合格）→ 全ユニット合格でレベル認定テスト（9割）
+// 問題は3種類をまぜる：ことば→いみ / 聞いて ことばを選ぶ / いみ→ことば（どれも6択）
+const STAR_KEY = ["vmS0", "vmS1", "vmS2", "vmS3"];
+const starStr = n => "★".repeat(n) + "☆".repeat(3 - n);
+const gauge = (n, total) => `<div class="gauge"><span style="width:${total ? Math.round(n / total * 100) : 0}%"></span></div>`;
+const unitCount = g => [0, 1, 2, 3].map(s => g.words.filter(v => VM.stars(v.id) === s).length);
+const learned = g => g.words.filter(v => VM.stars(v.id) >= 2).length;
+// 次のユニットは、前のユニットの8割が★1以上になったらひらく（同じ日のうちに先へ進める）
+const unitOpen2 = g => { if (g.n === 1) return true; const p = VGROUPS.find(x => x.level === g.level && x.n === g.n - 1); return p.words.filter(v => VM.stars(v.id) >= 1).length / p.words.length >= VM.UNLOCK; };
+
+function renderVmLevel(lv) {
+  const words = VOCAB.filter(v => v.level === lv), units = VGROUPS.filter(g => g.level === lv);
+  const allPassed = units.every(g => VM.unitPassed(g.key)), st = VM.levelState(lv);
+  const deep = words.filter(v => VM.stars(v.id) === 3).length / words.length >= VM.PASS;
   show(`
     <button class="back link">← ${tx("home")}</button>
-    <div class="row between"><h1>📖 ${tx("vocabList")}</h1>
+    <h1>🔤 ${tx("vocabShort")} ${esc(lv)}</h1>
+    <section class="card"><p>${tx("vmS2")} ${levelMastered(lv)} / ${words.length}${st.cert ? `　🎖 <b>${tx("vmCert")}</b>` : ""}${deep ? `　🏅 <b>${tx("vmDeep")}</b>` : ""}</p>${gauge(levelMastered(lv), words.length)}
+      <p class="note">🔥 ${tx("vmStreak")} ${VM.streak()}　/　${tx("vmToday")} ${VM.todayCount()}</p>
+      <p class="note">${tx("vmHow")}</p></section>
+    ${units.map(g => { const c = unitCount(g), open = unitOpen2(g);
+      return `<button class="card vmstage" data-st="${g.key}" ${open ? "" : "disabled"}>
+        <b>${open ? "" : "🔒 "}${tx("vmStage")} ${g.n}</b> <span class="note">（${esc(g.words[0].word)}〜）</span> ${VM.unitPassed(g.key) ? "✅" : ""}
+        ${gauge(learned(g), g.words.length)}<small class="note">★★★ ${c[3]}・★★ ${c[2]}・★ ${c[1]}・${tx("vmS0")} ${c[0]}</small></button>`; }).join("")}
+    <section class="card">
+      <h3>🎖 ${tx("vmFinal")}</h3>
+      <p class="note">${tx("vmFinalNote")}</p>
+      <button id="final" class="primary" ${allPassed ? "" : "disabled"}>${tx("vmFinal")}</button>
+      ${allPassed ? "" : `<p class="note">${tx("vmFinalLocked")}</p>`}
+      <button id="place" class="sub">${tx("vmPlacement")}</button><p class="note">${tx("vmPlacementNote")}</p>
+    </section>`);
+  $app.querySelector(".back").onclick = () => renderHome("exam");
+  $app.querySelectorAll("[data-st]").forEach(b => b.onclick = () => renderVmStage(VGROUPS.find(g => g.key === b.dataset.st)));
+  const pick = () => shuffle(words).slice(0, Math.min(VM.LEVEL_Q, words.length));
+  document.getElementById("final").onclick = () => vmQuiz({ kind: "final", level: lv, list: pick(), back: () => renderVmLevel(lv) });
+  document.getElementById("place").onclick = () => vmQuiz({ kind: "place", level: lv, list: pick(), back: () => renderVmLevel(lv) });
+}
+
+function renderVmStage(g) {
+  const c = unitCount(g), ready = learned(g) / g.words.length >= VM.UNLOCK;
+  const todo = () => { const r = g.words.filter(v => VM.stars(v.id) < 3 && !VM.waiting(v.id)); return shuffle(r.length ? r : g.words); };
+  const nWait = g.words.filter(v => VM.waiting(v.id)).length;
+  show(`
+    <button class="back link">← ${esc(g.level)}</button>
+    <h1>🔤 ${esc(g.level)} ${tx("vmStage")} ${g.n} ${VM.unitPassed(g.key) ? "✅" : ""}</h1>
+    <section class="card">${gauge(learned(g), g.words.length)}
+      <p>★★★ ${c[3]}・★★ <b>${c[2]}</b>・★ ${c[1]}・${tx("vmS0")} ${c[0]}</p>
+      ${nWait ? `<p class="note">⏳ ${tx("vmWaitNote")} ${nWait}</p>` : ""}</section>
+    <div class="vmsteps">
+      <button class="choice" id="intro">① 📖 ${tx("vmIntro")}<small class="note">${tx("vmIntroNote")}</small></button>
+      <button class="choice" id="train">② 🔁 ${tx("vmTrain")}<small class="note">${tx("vmTrainNote")}</small></button>
+      <button class="choice" id="test">③ ⭐ ${tx("vmTest")}<small class="note">${tx("vmTestNote")}</small></button>
+      <button class="choice" id="check" ${ready ? "" : "disabled"}>④ 🏁 ${tx("vmCheck")}<small class="note">${ready ? tx("vmCheckNote") : tx("vmCheckLocked")}</small></button>
+    </div>
+    <h3>${tx("vmMore")}</h3>
+    <div class="row">${VOCAB_MODES.filter(m => m !== "mean").map(m => `<button class="choice" data-vmode="${m}">${tx("v_" + m)}</button>`).join("")}</div>
+    <h3>${tx("vocabList")}</h3>
+    <div class="vmlist">${g.words.map(v => `<span class="vmw s${VM.stars(v.id)}">${esc(v.word)} <small>${starStr(VM.stars(v.id))}</small></span>`).join("")}</div>`);
+  const back = () => renderVmStage(g);
+  $app.querySelector(".back").onclick = () => renderVmLevel(g.level);
+  document.getElementById("intro").onclick = () => renderVocabList(g);
+  document.getElementById("train").onclick = () => vmQuiz({ kind: "train", level: g.level, list: todo(), back });
+  document.getElementById("test").onclick = () => vmQuiz({ kind: "test", level: g.level, list: todo(), back });
+  document.getElementById("check").onclick = () => vmQuiz({ kind: "check", level: g.level, stage: g, list: shuffle(g.words), back });
+  $app.querySelectorAll("[data-vmode]").forEach(b => b.onclick = () =>
+    startExam({ name: `${t("vocabShort")} ${g.label}：${t("v_" + b.dataset.vmode)}`, items: g.words.map(v => vocabItem(v, b.dataset.vmode, L())) }));
+}
+
+// おぼえる：語・読み・意味と、例文2つ（くらし・仕事）を聞いて覚える
+function renderVocabList(g) {
+  const furi = S.getFurigana();
+  show(`
+    <button class="back link">← ${tx("vmStage")} ${g.n}</button>
+    <div class="row between"><h1>📖 ${tx("vmIntro")}</h1>
       <label class="toggle"><input type="checkbox" id="furi" ${furi ? "checked" : ""}> ${tx("furigana")}</label></div>
-    <p class="note">${esc(vgroup().label)}</p>
-    ${vgroup().words.map(v => `<section class="card vocab">
+    <p class="note">${esc(g.label)}　${tx("vmIntroNote")}</p>
+    ${g.words.map(v => `<section class="card vocab">
       <p class="big">${sayBtn(v.word, v.reading)}<b>${furi ? `<ruby>${esc(v.word)}<rt>${esc(v.reading)}</rt></ruby>` : esc(v.word)}</b>
-        <span class="note">${esc(v.level)}</span></p>
+        <span class="vmw s${VM.stars(v.id)}">${starStr(VM.stars(v.id))}</span></p>
       <p>${esc(tr(v.mean) || v.mean.en)}</p>
       ${v.ex.map((e, k) => `<p>${sayBtn(e.ja)}<span class="note">${tx(k ? "vEx1" : "vEx0")}</span> ${jr(e.ja)}<br><small class="tr">${esc(L() === "ja" ? e.en : tr(e) || e.en)}</small></p>`).join("")}
-    </section>`).join("")}`);
-  $app.querySelector(".back").onclick = () => renderHome("exam");
-  $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
-  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); stay(renderVocabList); };
+    </section>`).join("")}
+    <button id="totrain" class="primary">🔁 ${tx("vmTrain")} →</button>`);
+  $app.querySelector(".back").onclick = () => renderVmStage(g);
+  document.getElementById("totrain").onclick = () => vmQuiz({ kind: "train", level: g.level, list: shuffle(g.words), back: () => renderVmStage(g) });
+  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); stay(() => renderVocabList(g)); };
+}
+
+// クイズ。kind: train（練習：まちがえた語だけで、全部正解するまで・★は変えない）/ test（★チェック：★が上がる・下がる）
+//       check（ユニットチェック）/ final（レベル認定テスト）/ place（実力チェック）
+// 問題の形（type）：mean＝ことば→いみ / listen＝聞いて ことばを選ぶ / reverse＝いみ→ことば。6択
+const VM_SEC = 10;   // ★チェック・ユニットチェック・認定テストの1問の時間。時間切れは不正解
+const VM_TYPES = ["mean", "listen", "reverse"];
+function vmQuiz(o) {
+  o.i ||= 0; o.round ||= 1; o.wrong ||= []; o.ok ||= 0; o.moves ||= [0, 0];
+  if (o.i >= o.list.length) return vmRoundEnd(o);
+  const v = o.list[o.i], timed = o.kind !== "train";
+  const type = VM_TYPES[(o.i + o.round) % 3];
+  const lang = L() === "ja" ? "en" : L();
+  const meanOf = w => w.mean[lang] || w.mean.en;
+  const furi = S.getFurigana();
+  const wordHtml = w => furi ? `<ruby>${esc(w.word)}<rt>${esc(w.reading)}</rt></ruby>` : esc(w.word);
+  const others = shuffle(VOCAB.filter(w => w.id !== v.id && w.level === v.level && meanOf(w) !== meanOf(v))).slice(0, 5);
+  const opts = shuffle([v, ...others]);
+  const label = w => type === "mean" ? esc(meanOf(w)) : wordHtml(w);
+  const prompt = type === "mean" ? `<p class="vmword">${wordHtml(v)}</p>${sayBtn(v.word, v.reading)}`
+    : type === "listen" ? `<p class="vmword">🔊</p><button class="primary" id="again">▶ ${tx("vmListenAgain")}</button>`
+    : `<p class="vmmean">${esc(meanOf(v))}</p>`;
+  show(`
+    <div class="row between"><button class="back link">✕ ${tx("vmQuit")}</button><span class="note">${tx("vmK_" + o.kind)}${o.round > 1 ? `（${tx("vmRound")} ${o.round}）` : ""}　${o.i + 1} / ${o.list.length}</span></div>
+    ${timed ? `<div class="vmtimer"><span id="tbar"></span></div>` : ""}
+    <section class="card vmq"><p class="note">${tx("vmQ_" + type)}</p>${prompt}</section>
+    <div class="vmgrid">${opts.map((w, k) => `<button class="ans" data-k="${k}">${label(w)}</button>`).join("")}</div>
+    <div id="res"></div>`);
+  if (type !== "reverse") sayLocal(v.reading);
+  document.getElementById("again")?.addEventListener("click", () => sayLocal(v.reading));
+  let done = false, timer;
+  const answer = k => {
+    if (done) return; done = true; clearTimeout(timer);
+    const ok = k >= 0 && opts[k] === v;
+    $app.querySelectorAll(".ans").forEach(b => { b.disabled = true; if (opts[+b.dataset.k] === v) b.classList.add("right"); });
+    if (k >= 0 && !ok) $app.querySelector(`.ans[data-k="${k}"]`).classList.add("wrong");
+    const tb = document.getElementById("tbar"); if (tb) { tb.style.width = getComputedStyle(tb).width; tb.style.transition = "none"; tb.classList.remove("go"); }
+    if (o.kind === "test") { const before = VM.stars(v.id), after = VM.record(v.id, ok); if (after > before) o.moves[0]++; if (after < before) o.moves[1]++; }
+    else if (o.kind === "place") { if (ok) VM.head(v.id); }
+    if (ok) o.ok++; else o.wrong.push(v);
+    const next = () => { o.i++; vmQuiz(o); };
+    document.getElementById("res").innerHTML = `<section class="card result ${ok ? "ok" : ""}">
+      <p class="big">${ok ? "✅" : k < 0 ? "⏰ " + tx("vmTimeUp") : "🔁"} <b>${wordHtml(v)}</b> ＝ ${esc(meanOf(v))}${o.kind === "test" ? `　<small>${starStr(VM.stars(v.id))}</small>` : ""}</p>
+      <p>${sayBtn(v.ex[0].ja)}${jr(v.ex[0].ja)}</p></section>
+      ${ok ? "" : `<button id="next" class="primary">${tx("next")} →</button>`}`;
+    wireSay($app);
+    if (ok) { const my = o.i; setTimeout(() => { if (o.i === my && document.getElementById("res")) next(); }, 900); }
+    else document.getElementById("next").onclick = next;
+  };
+  $app.querySelectorAll(".ans").forEach(b => b.onclick = () => answer(+b.dataset.k));
+  $app.querySelector(".back").onclick = () => { done = true; clearTimeout(timer); o.i = Infinity; o.back(); };
+  if (timed) {
+    const bar = document.getElementById("tbar");
+    requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.transitionDuration = VM_SEC + "s"; bar.classList.add("go"); }));
+    timer = setTimeout(() => answer(-1), VM_SEC * 1000);
+  }
+}
+
+function vmRoundEnd(o) {
+  const n = o.list.length, rate = n ? o.ok / n : 0;
+  // 練習：まちがえた語だけで、次の回へ（全部正解するまで）
+  if (o.kind === "train" && o.wrong.length) {
+    show(`<h1>🔁 ${tx("vmTrain")}</h1><section class="card"><p class="big">${tx("vmLeft")} ${o.wrong.length}</p>${gauge(n - o.wrong.length, n)}</section>
+      <button id="go" class="primary">${tx("vmNextRound")} →</button><button id="stop" class="link">${tx("vmQuit")}</button>`);
+    document.getElementById("go").onclick = () => vmQuiz({ ...o, list: shuffle(o.wrong), wrong: [], ok: 0, i: 0, round: o.round + 1 });
+    document.getElementById("stop").onclick = o.back;
+    return;
+  }
+  let msg = "", cls = "ok";
+  if (o.kind === "train") msg = tx("vmTrainDone");
+  else if (o.kind === "test") msg = `${tx("vmUp")} ${o.moves[0]}・${tx("vmDown")} ${o.moves[1]}<br><span class="note">${tx("vmTestAfter")}</span>`;
+  else if (o.kind === "place") msg = tx("vmPlaceDone");
+  else {
+    const pass = rate >= VM.PASS;
+    if (o.kind === "check") { if (pass) VM.passUnit(o.stage.key); msg = tx(pass ? "vmCheckPass" : "vmCheckFail"); }
+    else { if (pass) VM.passLevel(o.level); msg = tx(pass ? "vmCertPass" : "vmCheckFail"); }
+    if (!pass) cls = "";
+  }
+  S.addSession({ type: "vocab", exam: `${o.level} ${o.kind}`, at: new Date().toISOString(), seconds: 0, score: o.ok, total: n });
+  const lang = L() === "ja" ? "en" : L();
+  show(`<h1>🔤 ${tx("vmK_" + o.kind)}</h1>
+    <section class="card result ${cls}"><p class="big">${o.ok} / ${n}（${Math.round(rate * 100)}%）</p><p>${msg}</p></section>
+    ${o.wrong.length ? `<h3>${tx("vmMissed")}</h3><div class="vmlist">${o.wrong.map(v => `<span class="vmw s0">${esc(v.word)}（${esc(v.reading)}）${esc(v.mean[lang] || v.mean.en)}</span>`).join("")}</div>` : ""}
+    <button id="back" class="primary">${tx("next")} →</button>`);
+  document.getElementById("back").onclick = o.back;
 }
 
 // 仕事の試験の一問一答は問題が多いので、分野を選んでから解く（全部からでもよい）
