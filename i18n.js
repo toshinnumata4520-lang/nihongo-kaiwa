@@ -1,4 +1,4 @@
-import { EXTRA } from "./lang_extra.js?v=202610190651";
+import { EXTRA } from "./lang_extra.js?v=202610190657";
 // 画面の言葉。日本語は「やさしい日本語」。ベトナム語は仮訳（教材担当の確認待ち）。
 const T = {
   appName:      { ja: "しごとの日本語れんしゅう", en: "Work Japanese Practice", vi: "Luyện tiếng Nhật công việc" },
@@ -124,7 +124,7 @@ const T = {
   voiceLoading: { ja: "声を つくって います…（はじめは 数秒）", en: "Preparing the voice… (a few seconds the first time)", vi: "Đang tạo giọng nói… (lần đầu mất vài giây)" },
   voiceRetry:   { ja: "声が 出ませんでした。もう一度 ▶ を 押して ください", en: "No sound. Please press ▶ again", vi: "Không có tiếng. Hãy bấm ▶ lại" },
   examGroup2:   { ja: "仕事の 試験（特定技能2号・介護福祉士）", en: "Job exams (SSW No.2, care worker)", vi: "Thi nghề (Kỹ năng đặc định số 2, chuyên viên chăm sóc Kaigo)" },
-  vocabTitle:   { ja: "JLPT 単語（見本：N5 20語）", en: "JLPT vocabulary (sample: 20 N5 words)", vi: "Từ vựng JLPT (mẫu: 20 từ N5)" },
+  vocabTitle:   { ja: "JLPT 単語", en: "JLPT vocabulary", vi: "Từ vựng JLPT" },
   vocabShort:   { ja: "JLPT 単語", en: "JLPT words", vi: "Từ vựng JLPT" },
   vocabNote:    { ja: "ことば・いみ・例文で おぼえて、会話や 仕事で つかえるように します", en: "Learn each word with its meaning and example sentences, so you can use it in conversation and at work", vi: "Học từ, nghĩa và câu ví dụ để dùng được khi nói chuyện và khi làm việc" },
   vocabList:    { ja: "単語の 一覧", en: "Word list", vi: "Danh sách từ" },

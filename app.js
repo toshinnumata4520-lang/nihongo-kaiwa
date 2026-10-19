@@ -1,16 +1,16 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610190651";
-import { SCENES } from "./scenes.js?v=202610190651";
-import { SITUATIONS } from "./situations.js?v=202610190651";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610190651";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610190651";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610190651";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610190651";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610190651";
-import { EXAMS } from "./exams.js?v=202610190651";
-import { RUBY } from "./ruby.js?v=202610190651";
-import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610190651";
-import * as S from "./store.js?v=202610190651";
-import { autoSetup, preloadGis } from "./setup.js?v=202610190651";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610190657";
+import { SCENES } from "./scenes.js?v=202610190657";
+import { SITUATIONS } from "./situations.js?v=202610190657";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610190657";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610190657";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610190657";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610190657";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610190657";
+import { EXAMS } from "./exams.js?v=202610190657";
+import { RUBY } from "./ruby.js?v=202610190657";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610190657";
+import * as S from "./store.js?v=202610190657";
+import { autoSetup, preloadGis } from "./setup.js?v=202610190657";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -21,6 +21,14 @@ const PRICE = { liveAudioIn: 3, liveAudioOut: 12, liveTextIn: 0.75, liveTextOut:
 const $app = document.getElementById("app");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const L = () => getLang();
+// JLPT 単語は、レベルごとに20語ずつの「組」に分けて練習する（例：N5 ①＝1〜20語目）
+const VGROUPS = [...new Set(VOCAB.map(v => v.level))].flatMap(lv => {
+  const ws = VOCAB.filter(v => v.level === lv), out = [];
+  for (let i = 0; i < ws.length; i += 20) out.push({ key: `${lv}-${i / 20 + 1}`, label: `${lv} ${"①②③④⑤⑥⑦⑧⑨⑩"[i / 20] || i / 20 + 1}（${i + 1}〜${i + Math.min(20, ws.length - i)}）`, words: ws.slice(i, i + 20) });
+  return out;
+});
+const vgroup = () => { let k; try { k = localStorage.getItem("nk.vgroup"); } catch {} return VGROUPS.find(g => g.key === k) || VGROUPS[0]; };
+
 // ふりがな：「漢字(よみ)」の形を <ruby> にする。「｜」があれば、そこから後ろだけに付ける（例：｜3日(みっか)）
 const rubyHtml = s => esc(s).replace(/(?:｜([0-9０-９一-龯々〆ヶ]+)|([一-龯々〆ヶ]+))\(([ぁ-んー]+)\)/g, (_, a, b, r) => `<ruby>${a || b}<rt>${r}</rt></ruby>`).replace(/｜/g, "");
 // 日本語の文を表示する。ふりがながONで、ふりがな表（ruby.js）にあれば、ふりがな付きにする
@@ -309,6 +317,7 @@ function renderHome(tab) {
     <section class="card">
       <h2>🔤 ${bi("vocabTitle")}</h2>
       <p class="note">${tx("vocabNote")}</p>
+      <div class="row">${VGROUPS.map(g => `<button class="choice cat ${g.key === vgroup().key ? "on" : ""}" data-vg="${g.key}">${esc(g.label)}</button>`).join("")}</div>
       <div class="row"><button class="choice" id="vlist">📖 ${tx("vocabList")}</button>
         ${VOCAB_MODES.map(m => `<button class="choice" data-vmode="${m}">${tx("v_" + m)}</button>`).join("")}</div>
     </section>`;
@@ -333,7 +342,8 @@ function renderHome(tab) {
   document.getElementById("review")?.addEventListener("click", renderReview);
   document.getElementById("vlist")?.addEventListener("click", renderVocabList);
   $app.querySelectorAll("[data-vmode]").forEach(b => b.onclick = () =>
-    startExam({ name: `${t("vocabShort")}：${t("v_" + b.dataset.vmode)}`, items: VOCAB.map(v => vocabItem(v, b.dataset.vmode, L())) }));
+    startExam({ name: `${t("vocabShort")} ${vgroup().label}：${t("v_" + b.dataset.vmode)}`, items: vgroup().words.map(v => vocabItem(v, b.dataset.vmode, L())) }));
+  $app.querySelectorAll("[data-vg]").forEach(b => b.onclick = () => { try { localStorage.setItem("nk.vgroup", b.dataset.vg); } catch {} renderHome("exam"); });
   $app.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => { currentRuleCat = b.dataset.cat; renderHome("rules"); });
   const $qc = document.getElementById("quizCat");
   if ($qc) {
@@ -1000,7 +1010,8 @@ function renderVocabList() {
     <button class="back link">← ${tx("home")}</button>
     <div class="row between"><h1>📖 ${tx("vocabList")}</h1>
       <label class="toggle"><input type="checkbox" id="furi" ${furi ? "checked" : ""}> ${tx("furigana")}</label></div>
-    ${VOCAB.map(v => `<section class="card vocab">
+    <p class="note">${esc(vgroup().label)}</p>
+    ${vgroup().words.map(v => `<section class="card vocab">
       <p class="big">${sayBtn(v.word, v.reading)}<b>${furi ? `<ruby>${esc(v.word)}<rt>${esc(v.reading)}</rt></ruby>` : esc(v.word)}</b>
         <span class="note">${esc(v.level)}</span></p>
       <p>${esc(tr(v.mean) || v.mean.en)}</p>
