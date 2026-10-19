@@ -1,15 +1,16 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610130619";
-import { SCENES } from "./scenes.js?v=202610130619";
-import { SITUATIONS } from "./situations.js?v=202610130619";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610130619";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610130619";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610130619";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610130619";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610130619";
-import { EXAMS } from "./exams.js?v=202610130619";
-import { RUBY } from "./ruby.js?v=202610130619";
-import * as S from "./store.js?v=202610130619";
-import { autoSetup, preloadGis } from "./setup.js?v=202610130619";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610190651";
+import { SCENES } from "./scenes.js?v=202610190651";
+import { SITUATIONS } from "./situations.js?v=202610190651";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610190651";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610190651";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610190651";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610190651";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610190651";
+import { EXAMS } from "./exams.js?v=202610190651";
+import { RUBY } from "./ruby.js?v=202610190651";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610190651";
+import * as S from "./store.js?v=202610190651";
+import { autoSetup, preloadGis } from "./setup.js?v=202610190651";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -304,6 +305,12 @@ function renderHome(tab) {
       <p class="note">${tx("examGroup2")}</p>
       <div class="row">${EXAM_SETS.map((s, i) => s.group ? `<button class="choice" data-exam="${i}">${jr(s.name)}</button>` : "").join("")}</div>
       <p class="note">${tx("examNote")}</p>
+    </section>
+    <section class="card">
+      <h2>🔤 ${bi("vocabTitle")}</h2>
+      <p class="note">${tx("vocabNote")}</p>
+      <div class="row"><button class="choice" id="vlist">📖 ${tx("vocabList")}</button>
+        ${VOCAB_MODES.map(m => `<button class="choice" data-vmode="${m}">${tx("v_" + m)}</button>`).join("")}</div>
     </section>`;
   }
   show(`
@@ -319,8 +326,14 @@ function renderHome(tab) {
   $app.querySelectorAll("[data-go]").forEach(b => b.onclick = () => renderHome(b.dataset.go));
   $app.querySelectorAll(".scene").forEach(b => b.onclick = () => renderPrep(SCENES.find(s => s.id === b.dataset.id)));
   $app.querySelectorAll("[data-ind]").forEach(b => b.onclick = () => renderDrill(DRILLS.filter(d => d.industry === b.dataset.ind), 0));
-  $app.querySelectorAll("[data-exam]").forEach(b => b.onclick = () => startExam(EXAM_SETS[+b.dataset.exam]));
+  $app.querySelectorAll("[data-exam]").forEach(b => b.onclick = () => {
+    const set = EXAM_SETS[+b.dataset.exam];
+    new Set(EXAMS.filter(set.filter).map(q => q.section)).size > 1 && set.group ? renderExamCats(set) : startExam(set);
+  });
   document.getElementById("review")?.addEventListener("click", renderReview);
+  document.getElementById("vlist")?.addEventListener("click", renderVocabList);
+  $app.querySelectorAll("[data-vmode]").forEach(b => b.onclick = () =>
+    startExam({ name: `${t("vocabShort")}：${t("v_" + b.dataset.vmode)}`, items: VOCAB.map(v => vocabItem(v, b.dataset.vmode, L())) }));
   $app.querySelectorAll("[data-cat]").forEach(b => b.onclick = () => { currentRuleCat = b.dataset.cat; renderHome("rules"); });
   const $qc = document.getElementById("quizCat");
   if ($qc) {
@@ -980,6 +993,43 @@ function playScript(script) {
   }
 }
 
+// JLPT 単語の一覧：語・読み・意味と、例文2つ（くらし・仕事）を聞いて読む
+function renderVocabList() {
+  const furi = S.getFurigana();
+  show(`
+    <button class="back link">← ${tx("home")}</button>
+    <div class="row between"><h1>📖 ${tx("vocabList")}</h1>
+      <label class="toggle"><input type="checkbox" id="furi" ${furi ? "checked" : ""}> ${tx("furigana")}</label></div>
+    ${VOCAB.map(v => `<section class="card vocab">
+      <p class="big">${sayBtn(v.word, v.reading)}<b>${furi ? `<ruby>${esc(v.word)}<rt>${esc(v.reading)}</rt></ruby>` : esc(v.word)}</b>
+        <span class="note">${esc(v.level)}</span></p>
+      <p>${esc(tr(v.mean) || v.mean.en)}</p>
+      ${v.ex.map((e, k) => `<p>${sayBtn(e.ja)}<span class="note">${tx(k ? "vEx1" : "vEx0")}</span> ${jr(e.ja)}<br><small class="tr">${esc(L() === "ja" ? e.en : tr(e) || e.en)}</small></p>`).join("")}
+    </section>`).join("")}`);
+  $app.querySelector(".back").onclick = () => renderHome("exam");
+  $app.querySelectorAll("[data-say]").forEach(b => b.onclick = () => say(b.dataset.say, b.dataset.reading || ""));
+  document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); renderVocabList(); };
+}
+
+// 仕事の試験の一問一答は問題が多いので、分野を選んでから解く（全部からでもよい）
+function renderExamCats(set) {
+  const all = EXAMS.filter(set.filter);
+  // 分野の並びは、教材から作った問題（id に -t-）の順にする
+  const cats = [...new Set([...all.filter(q => q.id.includes("-t-")), ...all].map(q => q.section))];
+  show(`
+    <button class="back link">← ${tx("home")}</button>
+    <h1>📝 ${jr(set.name)}</h1>
+    <p class="note">${tx("pickCat")}</p>
+    <div class="row"><button class="choice" data-c="-1">${tx("allCats")}（${all.length}）</button>
+      ${cats.map((c, k) => `<button class="choice" data-c="${k}">${jr(c)}（${all.filter(q => q.section === c).length}）</button>`).join("")}</div>
+    <p class="note"><a href="print.html?exam=${encodeURIComponent(set.name)}" target="_blank" rel="noopener">🖨 ${tx("printVer")}</a></p>`);
+  $app.querySelector(".back").onclick = () => renderHome("exam");
+  $app.querySelectorAll("[data-c]").forEach(b => b.onclick = () => {
+    const c = cats[+b.dataset.c];
+    startExam(c ? { name: `${set.name}：${c}`, items: all.filter(q => q.section === c) } : set);
+  });
+}
+
 function startExam(set) {
   const qs = shuffle(set.items || EXAMS.filter(set.filter)).slice(0, 10).map(q => {
     if (!q.choices) return q;   // こたえを見て自分で〇つけする問題（短答・用語カード）
@@ -1016,7 +1066,7 @@ function renderExamQ(set, qs, i, results) {
     const ex = L() === "ja" ? "" : q[`explain_${L()}`] || trEn(q.explain_en);
     const $r = document.getElementById("res");
     $r.innerHTML = `<section class="card"><p class="big"><b>${jr(q.answer_text)}</b></p>
-        ${ex ? `<p>${esc(ex)}</p>` : ""}<p class="note">${jr(q.explain_ja)}</p></section>
+        ${ex ? `<p>${esc(ex)}</p>` : ""}<p class="note">${jr(q.explain_ja).replace(/\n/g, "<br>")}</p></section>
       <div class="row"><button id="selfok" class="sub">✅ ${tx("gotIt")}</button><button id="selfng" class="sub">🔁 ${tx("notYet")}</button></div>`;
     $r.scrollIntoView({ behavior: "smooth", block: "start" });
     const go = ok => { if (!answered()) results.push({ id: q.id, ok }); renderExamQ(set, qs, i + 1, results); };
@@ -1036,7 +1086,7 @@ function renderExamQ(set, qs, i, results) {
     document.getElementById("res").innerHTML = `
       <section class="card result ${ok ? "ok" : ""}">
         <p class="big">${ok ? "✅ " + tx("great") : "🔁 " + tx("examWrong")}</p>
-        <p>${L() === "ja" ? jr(q.explain_ja) : esc(ex)}</p>${L() !== "ja" ? `<p class="ja">${jr(q.explain_ja)}</p>` : ""}
+        <p>${L() === "ja" ? jr(q.explain_ja).replace(/\n/g, "<br>") : esc(ex)}</p>${L() !== "ja" && ex !== q.explain_ja ? `<p class="ja">${jr(q.explain_ja).replace(/\n/g, "<br>")}</p>` : ""}
         ${q.script ? `<details><summary class="note">${tx("showText")}</summary><p>${esc(q.script).replace(/\n/g, "<br>")}</p></details>` : ""}
       </section>
       <button id="next" class="primary">${tx("next")} →</button>`;

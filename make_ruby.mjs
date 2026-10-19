@@ -8,6 +8,7 @@ import { SCENES } from "./scenes.js";
 import { SITUATIONS } from "./situations.js";
 import { DRILLS } from "./drills.js";
 import { EXAMS } from "./exams.js";
+import { vocabTexts } from "./vocab.js";
 
 const KEY = process.env.GEMINI_API_KEY || (fs.existsSync(".devkey") ? fs.readFileSync(".devkey", "utf8").trim() : "");
 if (!KEY) { console.error("APIキーがありません"); process.exit(1); }
@@ -24,8 +25,10 @@ uiJa.forEach(add);
 for (const sc of SCENES) { add(sc.title_ja); add(sc.goal_ja); (sc.hints || []).forEach(add); sc.title_ja.split("：").forEach(add); add(sc.title_ja.split("：").slice(1).join("：")); }
 for (const s of Object.values(SITUATIONS)) { add(s.you.ja); add(s.now.ja); s.todo.forEach(x => add(x.ja)); }
 for (const d of DRILLS) add(d.speaker);
+vocabTexts().forEach(add);
 for (const q of EXAMS) {
   add(q.section); add(q.explain_ja);
+  if (!q.question_furigana) add(q.question_ja);   // 一問一答（教材から作った分）は問題文もふりがな表で
   if (q.choices && !q.term) q.choices.forEach(add);
   if (q.answer_text) add(q.answer_text);
 }

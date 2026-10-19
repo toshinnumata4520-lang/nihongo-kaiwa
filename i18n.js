@@ -1,4 +1,4 @@
-import { EXTRA } from "./lang_extra.js?v=202610130619";
+import { EXTRA } from "./lang_extra.js?v=202610190651";
 // 画面の言葉。日本語は「やさしい日本語」。ベトナム語は仮訳（教材担当の確認待ち）。
 const T = {
   appName:      { ja: "しごとの日本語れんしゅう", en: "Work Japanese Practice", vi: "Luyện tiếng Nhật công việc" },
@@ -124,6 +124,19 @@ const T = {
   voiceLoading: { ja: "声を つくって います…（はじめは 数秒）", en: "Preparing the voice… (a few seconds the first time)", vi: "Đang tạo giọng nói… (lần đầu mất vài giây)" },
   voiceRetry:   { ja: "声が 出ませんでした。もう一度 ▶ を 押して ください", en: "No sound. Please press ▶ again", vi: "Không có tiếng. Hãy bấm ▶ lại" },
   examGroup2:   { ja: "仕事の 試験（特定技能2号・介護福祉士）", en: "Job exams (SSW No.2, care worker)", vi: "Thi nghề (Kỹ năng đặc định số 2, chuyên viên chăm sóc Kaigo)" },
+  vocabTitle:   { ja: "JLPT 単語（見本：N5 20語）", en: "JLPT vocabulary (sample: 20 N5 words)", vi: "Từ vựng JLPT (mẫu: 20 từ N5)" },
+  vocabShort:   { ja: "JLPT 単語", en: "JLPT words", vi: "Từ vựng JLPT" },
+  vocabNote:    { ja: "ことば・いみ・例文で おぼえて、会話や 仕事で つかえるように します", en: "Learn each word with its meaning and example sentences, so you can use it in conversation and at work", vi: "Học từ, nghĩa và câu ví dụ để dùng được khi nói chuyện và khi làm việc" },
+  vocabList:    { ja: "単語の 一覧", en: "Word list", vi: "Danh sách từ" },
+  v_mean:       { ja: "① 単語→いみ", en: "① Word → meaning", vi: "① Từ → nghĩa" },
+  v_read:       { ja: "② 例文を 読んで 答える", en: "② Read and answer", vi: "② Đọc câu và trả lời" },
+  v_make:       { ja: "③ 単語で 文を 作る", en: "③ Make a sentence", vi: "③ Đặt câu với từ" },
+  v_blank:      { ja: "④ （　）に 入る ことば", en: "④ Fill in the blank", vi: "④ Điền vào chỗ trống" },
+  vEx0:         { ja: "くらし", en: "Daily life", vi: "Đời sống" },
+  vEx1:         { ja: "仕事", en: "Work", vi: "Công việc" },
+  pickCat:      { ja: "分野を えらんで ください（1回 10問）", en: "Choose a topic (10 questions each time)", vi: "Hãy chọn lĩnh vực (mỗi lần 10 câu)" },
+  allCats:      { ja: "全部から", en: "All topics", vi: "Tất cả" },
+  printVer:     { ja: "印刷用（授業で くばる 問題用紙と 解答）", en: "Printable version (worksheet and answers for class)", vi: "Bản in (đề và đáp án cho lớp học)" },
   upTo2:        { ja: "2回まで", en: "up to 2 times", vi: "tối đa 2 lần" },
   examWrong:    { ja: "ざんねん。正しい こたえは 緑の ボタン", en: "Not quite. The right answer is the green button", vi: "Chưa đúng. Đáp án đúng là nút màu xanh" },
   examGood:     { ja: "よく できました！ この ちょうしで", en: "Great job! Keep it up", vi: "Làm tốt lắm! Cứ tiếp tục nhé" },

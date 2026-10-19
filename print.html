@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一問一答 印刷用</title>
+<!-- 授業で配るための印刷用ページ。一問一答を分野ごとに、問題用紙と解答に分けて印刷する -->
+<style>
+  :root { --ink: #222; --sub: #666; --line: #bbb; --bg: #fff; --accent: #b5501e; }
+  body { background: var(--bg); color: var(--ink); font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif; margin: 0 auto; max-width: 820px; padding: 16px; line-height: 1.7; }
+  .panel { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  .panel label { white-space: nowrap; }
+  .panel select, .panel button { font: inherit; padding: 4px 8px; }
+  .panel button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 6px 14px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 18px 0 6px; border-bottom: 2px solid var(--ink); }
+  .meta { color: var(--sub); font-size: 13px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  ol { padding-left: 2.2em; margin: 0; }
+  li { margin: 0 0 10px; break-inside: avoid; }
+  .ox { margin-right: .3em; white-space: nowrap; }
+  .write { display: block; border-bottom: 1px solid var(--ink); height: 1.8em; margin-top: 2px; }
+  .ans b { color: var(--accent); }
+  .ex { color: var(--sub); font-size: 13px; display: block; }
+  .src { color: var(--sub); font-size: 12px; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 6px; }
+  rt { font-size: 55%; }
+  .answers { break-before: page; }
+  @media print { .panel { display: none; } body { max-width: none; padding: 0; } @page { size: A4; margin: 14mm; } }
+</style>
+</head>
+<body>
+<div class="panel">
+  <label>試験 <select id="exam"></select></label>
+  <label>分野 <select id="cat"></select></label>
+  <label>問題数 <select id="num"><option value="0">全部</option><option value="10">10問（ランダム）</option><option value="20" selected>20問（ランダム）</option><option value="30">30問（ランダム）</option></select></label>
+  <label><input type="checkbox" id="furi" checked> ふりがな</label>
+  <label><input type="checkbox" id="ans" checked> 解答を次のページに付ける</label>
+  <label><input type="checkbox" id="name" checked> 名前の欄</label>
+  <button id="shuffle">問題を入れかえる</button>
+  <button id="print">🖨 印刷</button>
+</div>
+<div id="out"></div>
+<script type="module">
+import { EXAMS } from "./exams.js?v=202610190651";
+import { RUBY } from "./ruby.js?v=202610190651";
+
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const rubyHtml = s => esc(s).replace(/(?:｜([0-9０-９一-龯々〆ヶ]+)|([一-龯々〆ヶ]+))\(([ぁ-んー]+)\)/g, (_, a, b, r) => `<ruby>${a || b}<rt>${r}</rt></ruby>`).replace(/｜/g, "");
+const $ = id => document.getElementById(id);
+const furi = () => $("furi").checked;
+// ふりがな表の文を行で分けて、問題の本文（1行目の「えらんでください」などを除いた部分）だけ使う
+const body = s => s.split("\n").slice(1).join("\n") || s;
+const line = (s, cut) => {
+  if (furi() && RUBY[s]) return rubyHtml(cut ? body(RUBY[s]) : RUBY[s]).replace(/\n/g, "<br>");
+  return esc(cut ? body(s) : s).replace(/\n/g, "<br>");
+};
+const qText = q => q.question_furigana && !/[一-龯々]/.test(q.question_furigana)
+  ? esc(body(q.question_ja)) + (furi() ? `<span class="ex">${esc(body(q.question_furigana))}</span>` : "")
+  : line(q.question_ja, true);
+
+const SETS = [...new Set(EXAMS.filter(q => q.exam.startsWith("一問一答")).map(q => q.exam))];
+$("exam").innerHTML = SETS.map(s => `<option>${esc(s)}</option>`).join("");
+let picked = [];
+function fillCats() {
+  const all = EXAMS.filter(q => q.exam === $("exam").value);
+  const cats = [...new Set([...all.filter(q => q.id.includes("-t-")), ...all].map(q => q.section))];
+  $("cat").innerHTML = `<option value="">全部（${all.length}）</option>` + cats.map(c => `<option value="${esc(c)}">${esc(c)}（${all.filter(q => q.section === c).length}）</option>`).join("");
+}
+function pick() {
+  const all = EXAMS.filter(q => q.exam === $("exam").value && (!$("cat").value || q.section === $("cat").value));
+  const n = +$("num").value;
+  const a = all.slice();
+  if (n) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } }
+  picked = n ? a.slice(0, n) : a;
+  render();
+}
+function render() {
+  const title = `${$("exam").value}${$("cat").value ? "：" + $("cat").value : ""}`;
+  // 出典は、教材から作った問題（id に -t-）の書き方「〇〇 p.12 をもとに編集・加工」から教材名だけ取り出す
+  const srcs = [...new Set(picked.filter(q => q.id.includes("-t-")).map(q => q.source.replace(/ p\.\d+.*$/, "")))];
+  const head = `<h1>${esc(title)}</h1><div class="meta"><span>${picked.length}問</span>${$("name").checked ? "<span>日付　　月　　日　　名前＿＿＿＿＿＿＿＿＿＿＿＿</span>" : ""}</div>`;
+  const qs = picked.map(q => `<li>${q.choices ? `<span class="ox">（　　）</span>${qText(q)}` : `${qText(q)}<span class="write"></span>`}</li>`).join("");
+  const how = `<p class="ex">（　）の問題：正しければ ○、まちがいなら × を書きましょう。線の問題：答えを書きましょう。</p>`;
+  const ans = picked.map(q => {
+    const a = q.choices ? q.choices[q.answer_index] : q.answer_text;
+    return `<li class="ans"><b>${q.choices ? esc(a) : line(a)}</b><span class="ex">${line(q.explain_ja)}</span></li>`;
+  }).join("");
+  const src = `<div class="src">出典：${srcs.map(esc).join("／") || "各分野の公式学習テキスト"}をもとに編集・加工した練習問題です（公式の試験問題ではありません）。📖 は参考にしたテキストのページです。</div>`;
+  $("out").innerHTML = `${head}<h2>問題</h2>${how}<ol>${qs}</ol>${src}` + ($("ans").checked ? `<section class="answers"><h1>${esc(title)}　解答と解説</h1><ol>${ans}</ol>${src}</section>` : "");
+}
+$("exam").onchange = () => { fillCats(); pick(); };
+["cat", "num"].forEach(id => $(id).onchange = pick);
+["furi", "ans", "name"].forEach(id => $(id).onchange = render);
+$("shuffle").onclick = pick;
+$("print").onclick = () => print();
+// ?exam=一問一答 建設2号&cat=職長 で開ける
+const p = new URLSearchParams(location.search);
+if (p.get("exam") && SETS.includes(p.get("exam"))) $("exam").value = p.get("exam");
+fillCats();
+if (p.get("cat")) $("cat").value = p.get("cat");
+pick();
+</script>
+</body>
+</html>
