@@ -1,9 +1,13 @@
 // 音声の自動チェック：アプリと同じ仕組み（Live API）で読み上げた声を保存し、別のAIに聞き取らせて
 // 読み間違い・余計な発言・抜け・自然さを判定する。結果は qa/ に保存（GitHubには上げない）。
 // 使い方: node audio_check.mjs        （環境変数 GEMINI_API_KEY または .devkey のキーを使う）
-//         node audio_check.mjs f1 c2  （IDを指定するとその問題だけ）
+//         node audio_check.mjs f1 c2  （IDを指定するとその問題だけ。ルール・マナーの ID（m-time など）も指定できる）
+// アプリと同じく、声に渡す文と読みは yomi.js の speechOf で作る
 import fs from "fs";
 import { DRILLS } from "./drills.js";
+import { MANNERS } from "./manners.js";
+import { RUBY } from "./ruby.js";
+import { speechOf } from "./yomi.js";
 
 const KEY = process.env.GEMINI_API_KEY || (fs.existsSync(".devkey") ? fs.readFileSync(".devkey", "utf8").trim() : "");
 if (!KEY) { console.error("APIキーがありません"); process.exit(1); }
@@ -32,7 +36,9 @@ function liveSpeak(text, { style = "", reading = "", voice = "" } = {}, withVoic
       model: `models/${LIVE_MODEL}`,
       systemInstruction: { parts: [{ text:
         "あなたは日本語の読み上げ係です。ユーザーから届く日本語のせりふを、一字一句そのまま、指定された話し方で声に出して読みます。" +
-        "せりふ以外のこと（あいさつ・説明・感想・返事）は一切言いません。せりふを変えたり足したりしません。" }] },
+        "せりふ以外のこと（あいさつ・説明・感想・返事）は一切言いません。せりふを変えたり足したりしません。" +
+        "「読み方」が付いているときは、せりふの漢字・数字・英字を、その読み方のとおりの音で読みます（読み方を2回読んだり、別に読み上げたりはしません）。" +
+        "かっこ・記号の名前（かっこ、イコール、まる など）は読まず、区切りとして少し間をあけます。" }] },
       generationConfig: { responseModalities: ["AUDIO"],
         ...(withVoice && voice ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } : {}) },
     } }));
@@ -89,18 +95,24 @@ async function judge(wavBuf, expected, reading, style) {
 }
 
 const only = process.argv.slice(2);
-const items = DRILLS.filter(d => !only.length || only.includes(d.id));
+const all = [
+  ...DRILLS.map(d => ({ id: d.id, say: d.say, reading: d.say_kana, style: d.style, stylePrompt: STYLE_PROMPT[d.style], voice: d.voice })),
+  ...MANNERS.map(m => ({ id: m.id, say: m.point.ja, reading: "", style: "先生", stylePrompt: "日本語の先生が、はっきり自然に", voice: "" })),
+];
+const items = all.filter(d => only.length ? only.includes(d.id) : DRILLS.some(x => x.id === d.id));
 fs.mkdirSync("qa/audio", { recursive: true });
 const results = [];
-for (const d of items) {
-  const style = STYLE_PROMPT[d.style];
+for (const d0 of items) {
+  const sp = speechOf(d0.say, d0.reading, RUBY);
+  const d = { ...d0, say: sp.text, say_kana: sp.kanaOk ? sp.kana : "" };
+  const style = d.stylePrompt;
   process.stdout.write(`${d.id} ${d.say} … `);
   try {
     let pcm;
     try { pcm = await liveSpeak(d.say, { style, reading: d.say_kana, voice: d.voice }, true); }
     catch (e) { console.log(`(声の指定なしで再試行: ${e.message}) `); pcm = await liveSpeak(d.say, { style, reading: d.say_kana, voice: d.voice }, false); }
     const w = wav(pcm); fs.writeFileSync(`qa/audio/${d.id}.wav`, w);
-    const j = await judge(w, d.say, d.say_kana, d.style);
+    const j = await judge(w, d.say, d.say_kana || sp.kana, d.style);
     const sec = (pcm.length / 2 / 24000).toFixed(1);
     results.push({ id: d.id, say: d.say, style: d.style, voice: d.voice, sec, ...j });
     console.log(`自然さ${j.naturalness} 話し方${j.style_match} 読み誤り${j.reading_errors.length} 余計${j.extra_speech ? "あり" : "なし"} 抜け${j.missing.length} ${sec}秒`);
