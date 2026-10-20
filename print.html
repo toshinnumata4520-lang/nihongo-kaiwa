@@ -40,8 +40,8 @@
 </div>
 <div id="out"></div>
 <script type="module">
-import { EXAMS } from "./exams.js?v=202610201252";
-import { RUBY } from "./ruby.js?v=202610201252";
+import { EXAMS } from "./exams.js?v=202610201254";
+import { RUBY } from "./ruby.js?v=202610201254";
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const rubyHtml = s => esc(s).replace(/(?:｜([0-9０-９一-龯々〆ヶ]+)|([一-龯々〆ヶ]+))\(([ぁ-んー]+)\)/g, (_, a, b, r) => `<ruby>${a || b}<rt>${r}</rt></ruby>`).replace(/｜/g, "");
