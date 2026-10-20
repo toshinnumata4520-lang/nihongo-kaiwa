@@ -142,6 +142,8 @@ function readNumbers(s) {
   // 範囲 5〜10分 → ごふんから じゅっぷん（前の数にも同じ助数詞を付けて読む）
   s = s.replace(new RegExp(`(\\d+)\\s*[〜～~\\-－]\\s*(\\d+)(${C_KEYS.join("|")})`, "g"), (_, a, b, k) => `${a}${k}から${b}${k}`);
   s = s.replace(/(\d+)\s*[〜～~]\s*(?=\d)/g, "$1から");
+  // 試合の点数 3対1 → さんたいいち
+  s = s.replace(/(\d+)対(?=\d)/g, "$1たい");
   // 月日：1月1日 → いちがつついたち
   s = s.replace(/(\d{1,2})月(\d{1,2})日/g, (_, m, d) => MONTH(+m) + dayKana(+d, true));
   s = s.replace(/(\d{1,2})月(?![間])/g, (_, m) => +m >= 1 && +m <= 12 ? MONTH(+m) : _);
