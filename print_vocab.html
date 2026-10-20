@@ -44,8 +44,8 @@
 </div>
 <div id="out"></div>
 <script type="module">
-import { VOCAB } from "./vocab.js?v=202610201257";
-import { RUBY } from "./ruby.js?v=202610201257";
+import { VOCAB } from "./vocab.js?v=202610201259";
+import { RUBY } from "./ruby.js?v=202610201259";
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const rubyHtml = s => esc(s).replace(/(?:｜([0-9０-９一-龯々〆ヶ]+)|([一-龯々〆ヶ]+))\(([ぁ-んー]+)\)/g, (_, a, b, r) => `<ruby>${a || b}<rt>${r}</rt></ruby>`).replace(/｜/g, "");
