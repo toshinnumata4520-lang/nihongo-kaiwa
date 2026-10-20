@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JLPT単語 印刷用</title>
+<!-- 授業で配るための JLPT 単語の印刷用ページ。ユニットごとに「単語一覧」か「確認テスト（解答つき）」を印刷する -->
+<style>
+  :root { --ink: #222; --sub: #666; --line: #bbb; --bg: #fff; --accent: #b5501e; }
+  body { background: var(--bg); color: var(--ink); font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif; margin: 0 auto; max-width: 820px; padding: 16px; line-height: 1.7; }
+  .panel { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  .panel label { white-space: nowrap; }
+  .panel select, .panel button { font: inherit; padding: 4px 8px; }
+  .panel button { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 6px 14px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 16px 0 6px; border-bottom: 2px solid var(--ink); }
+  .meta { color: var(--sub); font-size: 13px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 4px 6px; vertical-align: top; text-align: left; }
+  th { background: #f3f3f3; }
+  td.w { font-size: 18px; font-weight: bold; white-space: nowrap; }
+  .tr { color: var(--sub); font-size: 12px; display: block; }
+  ol { padding-left: 2.2em; margin: 0; }
+  li { margin: 0 0 8px; break-inside: avoid; }
+  .write { display: inline-block; min-width: 14em; border-bottom: 1px solid var(--ink); }
+  .ch { color: var(--sub); font-size: 13px; }
+  .ans b { color: var(--accent); }
+  .src { color: var(--sub); font-size: 12px; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 6px; }
+  rt { font-size: 55%; }
+  .answers { break-before: page; }
+  @media print { .panel { display: none; } body { max-width: none; padding: 0; } @page { size: A4; margin: 12mm; } }
+</style>
+</head>
+<body>
+<div class="panel">
+  <label>レベル <select id="lv"></select></label>
+  <label>ユニット <select id="unit"></select></label>
+  <label>種類 <select id="kind"><option value="list">単語一覧</option><option value="test">確認テスト</option></select></label>
+  <label>意味の言語 <select id="lang"><option value="en">English</option><option value="vi">Tiếng Việt</option><option value="id">Bahasa Indonesia</option><option value="tl">Tagalog</option></select></label>
+  <label><input type="checkbox" id="furi" checked> ふりがな</label>
+  <label><input type="checkbox" id="name" checked> 名前の欄</label>
+  <button id="shuffle">問題を入れかえる</button>
+  <button id="print">🖨 印刷</button>
+</div>
+<div id="out"></div>
+<script type="module">
+import { VOCAB } from "./vocab.js?v=202610200744";
+import { RUBY } from "./ruby.js?v=202610200744";
+
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const rubyHtml = s => esc(s).replace(/(?:｜([0-9０-９一-龯々〆ヶ]+)|([一-龯々〆ヶ]+))\(([ぁ-んー]+)\)/g, (_, a, b, r) => `<ruby>${a || b}<rt>${r}</rt></ruby>`).replace(/｜/g, "");
+const $ = id => document.getElementById(id);
+const furi = () => $("furi").checked;
+const jr = s => furi() && RUBY[s] ? rubyHtml(RUBY[s]) : esc(s);
+const word = v => furi() && v.reading !== v.word ? `<ruby>${esc(v.word)}<rt>${esc(v.reading)}</rt></ruby>` : esc(v.word);   // ひらがなだけの語には ふりがなを付けない
+const mean = v => esc(v.mean[$("lang").value] || v.mean.en);
+// 穴うめの文：アプリの「（　）に入ることば」と同じ文なので、ふりがな表にある形をそのまま使う
+const BLANK_Q = "（　）に 入る ことばは どれですか。\n";
+const blankLine = v => {
+  const s = v.ex[0].ja.replace(v.blank, "（　）"), r = RUBY[BLANK_Q + s];
+  return (furi() && r ? rubyHtml(r.split("\n").slice(1).join("")) : esc(s)).replace("（　）", "（　　　　）");
+};
+const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+
+const LEVELS = [...new Set(VOCAB.map(v => v.level))];
+$("lv").innerHTML = LEVELS.map(l => `<option>${l}</option>`).join("");
+const units = () => { const ws = VOCAB.filter(v => v.level === $("lv").value), out = []; for (let i = 0; i < ws.length; i += 20) out.push(ws.slice(i, i + 20)); return out; };
+function fillUnits() { $("unit").innerHTML = units().map((u, i) => `<option value="${i}">ユニット ${i + 1}（${u[0].word}〜）</option>`).join(""); }
+let order = [];
+function pick() { order = shuffle(units()[+$("unit").value] || []); render(); }
+
+function render() {
+  const ws = units()[+$("unit").value] || [];
+  const title = `JLPT単語 ${$("lv").value} ユニット ${+$("unit").value + 1}`;
+  const head = (t) => `<h1>${esc(t)}</h1><div class="meta"><span>${ws.length}語</span>${$("name").checked ? "<span>日付　　月　　日　　名前＿＿＿＿＿＿＿＿＿＿＿＿</span>" : ""}</div>`;
+  const src = `<div class="src">例文と問題は自作の練習用です（JLPTの公式の問題ではありません）。</div>`;
+  if ($("kind").value === "list") {
+    $("out").innerHTML = head(`${title}　単語一覧`) + `<table><tr><th>ことば</th><th>いみ</th><th>例文（くらし／仕事）</th></tr>` +
+      ws.map(v => `<tr><td class="w">${word(v)}</td><td>${mean(v)}</td><td>${v.ex.map(e => `${jr(e.ja)}<span class="tr">${esc(e[$("lang").value] || e.en)}</span>`).join("")}</td></tr>`).join("") + `</table>` + src;
+    return;
+  }
+  // 確認テスト：A＝ことば→いみ（書く）、B＝いみ→ことば（書く）、C＝（　）に入ることば（えらぶ）
+  const a = order.slice(0, 7), b = order.slice(7, 14), c = order.slice(14, 20);
+  const pool = ws.map(v => v.blank);
+  const secA = `<h2>A　ことばの いみを 書きましょう</h2><ol>${a.map(v => `<li><b>${word(v)}</b>　→　<span class="write"></span></li>`).join("")}</ol>`;
+  const secB = `<h2>B　日本語で 書きましょう</h2><ol start="${a.length + 1}">${b.map(v => `<li>${mean(v)}　→　<span class="write"></span></li>`).join("")}</ol>`;
+  const secC = `<h2>C　（　）に 入る ことばを えらびましょう</h2><p class="ch">${shuffle(c.map(v => v.blank)).map(esc).join("・")}</p><ol start="${a.length + b.length + 1}">${c.map(v => `<li>${blankLine(v)}</li>`).join("")}</ol>`;
+  const ansA = a.map(v => `<li class="ans"><b>${esc(v.word)}（${esc(v.reading)}）</b>　${mean(v)}</li>`).join("");
+  const ansB = b.map(v => `<li class="ans"><b>${esc(v.word)}（${esc(v.reading)}）</b>　${mean(v)}</li>`).join("");
+  const ansC = c.map(v => `<li class="ans"><b>${esc(v.blank)}</b>　${jr(v.ex[0].ja)}</li>`).join("");
+  $("out").innerHTML = head(`${title}　確認テスト`) + secA + secB + secC + src +
+    `<section class="answers"><h1>${esc(title)}　解答</h1><ol>${ansA}${ansB}${ansC}</ol>${src}</section>`;
+}
+$("lv").onchange = () => { fillUnits(); pick(); };
+$("unit").onchange = pick;
+["kind", "lang", "furi", "name"].forEach(id => $(id).onchange = render);
+$("shuffle").onclick = pick;
+$("print").onclick = () => print();
+// ?lv=N4&unit=2&kind=test&lang=vi で開ける（unit は 1 から）
+const p = new URLSearchParams(location.search);
+if (LEVELS.includes(p.get("lv"))) $("lv").value = p.get("lv");
+fillUnits();
+if (p.get("unit")) $("unit").value = String(+p.get("unit") - 1);
+if (p.get("kind")) $("kind").value = p.get("kind");
+if (p.get("lang")) $("lang").value = p.get("lang");
+pick();
+</script>
+</body>
+</html>

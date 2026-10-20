@@ -1,4 +1,4 @@
-import { EXTRA } from "./lang_extra.js?v=202610200742";
+import { EXTRA } from "./lang_extra.js?v=202610200744";
 // 画面の言葉。日本語は「やさしい日本語」。ベトナム語は仮訳（教材担当の確認待ち）。
 const T = {
   appName:      { ja: "しごとの日本語れんしゅう", en: "Work Japanese Practice", vi: "Luyện tiếng Nhật công việc" },
@@ -183,6 +183,7 @@ const T = {
   vmCheckFail:   { ja: "あと 少し。練習と ★チェックを して、もう一度", en: "Almost. Practice and do the star check, then try again", vi: "Còn một chút nữa. Luyện tập và kiểm tra sao rồi thử lại" },
   vmCertPass:    { ja: "合格！ この レベルの 単語を 認定します", en: "Passed! You are certified for this level's words", vi: "Đỗ! Bạn được chứng nhận từ vựng cấp độ này" },
   vmMissed:      { ja: "まちがえた ことば", en: "Words you missed", vi: "Những từ sai" },
+  printVocab:   { ja: "印刷用（単語一覧・確認テスト）", en: "Printable (word list / quiz)", vi: "Bản in (danh sách từ / bài kiểm tra)" },
   pickCat:      { ja: "分野を えらんで ください（1回 10問）", en: "Choose a topic (10 questions each time)", vi: "Hãy chọn lĩnh vực (mỗi lần 10 câu)" },
   allCats:      { ja: "全部から", en: "All topics", vi: "Tất cả" },
   printVer:     { ja: "印刷用（授業で くばる 問題用紙と 解答）", en: "Printable version (worksheet and answers for class)", vi: "Bản in (đề và đáp án cho lớp học)" },

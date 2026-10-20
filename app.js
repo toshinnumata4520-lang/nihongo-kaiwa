@@ -1,18 +1,18 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610200742";
-import { SCENES } from "./scenes.js?v=202610200742";
-import { SITUATIONS } from "./situations.js?v=202610200742";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610200742";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610200742";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610200742";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610200742";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610200742";
-import { EXAMS } from "./exams.js?v=202610200742";
-import { RUBY } from "./ruby.js?v=202610200742";
-import { speechOf } from "./yomi.js?v=202610200742";
-import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610200742";
-import * as VM from "./vmaster.js?v=202610200742";
-import * as S from "./store.js?v=202610200742";
-import { autoSetup, preloadGis } from "./setup.js?v=202610200742";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610200744";
+import { SCENES } from "./scenes.js?v=202610200744";
+import { SITUATIONS } from "./situations.js?v=202610200744";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610200744";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610200744";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610200744";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610200744";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610200744";
+import { EXAMS } from "./exams.js?v=202610200744";
+import { RUBY } from "./ruby.js?v=202610200744";
+import { speechOf } from "./yomi.js?v=202610200744";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610200744";
+import * as VM from "./vmaster.js?v=202610200744";
+import * as S from "./store.js?v=202610200744";
+import { autoSetup, preloadGis } from "./setup.js?v=202610200744";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -1045,7 +1045,8 @@ function renderVmLevel(lv) {
       <button id="final" class="primary" ${allPassed ? "" : "disabled"}>${tx("vmFinal")}</button>
       ${allPassed ? "" : `<p class="note">${tx("vmFinalLocked")}</p>`}
       <button id="place" class="sub">${tx("vmPlacement")}</button><p class="note">${tx("vmPlacementNote")}</p>
-    </section>`);
+    </section>
+    <p class="note"><a href="print_vocab.html?lv=${encodeURIComponent(lv)}" target="_blank" rel="noopener">🖨 ${tx("printVocab")}</a></p>`);
   $app.querySelector(".back").onclick = () => renderHome("exam");
   $app.querySelectorAll("[data-st]").forEach(b => b.onclick = () => renderVmStage(VGROUPS.find(g => g.key === b.dataset.st)));
   const pick = () => shuffle(words).slice(0, Math.min(VM.LEVEL_Q, words.length));
