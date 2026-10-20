@@ -8,6 +8,7 @@ import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610200113";
 import { MANNERS, MANNER_CATS } from "./manners.js?v=202610200113";
 import { EXAMS } from "./exams.js?v=202610200113";
 import { RUBY } from "./ruby.js?v=202610200113";
+import { speechOf } from "./yomi.js?v=202610200113";
 import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610200113";
 import * as VM from "./vmaster.js?v=202610200113";
 import * as S from "./store.js?v=202610200113";
@@ -127,26 +128,28 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // お手本の声。キーがあればAIの自然な声、なければスマホの読み上げ。reading は全文ひらがなの読み方
+// 声に渡す文字列は yomi.js で作る：text は記号・出典を外した文、kana は数字・英字・記号まで読みにした全文の読み
+// （reading がなければ、手で書いた読み → ふりがな表 ruby.js の順に読みを作る）
 async function say(text, reading = "") {
-  const kana = reading && !/[(（]/.test(reading) ? reading : "";
+  const sp = speechOf(text, reading, RUBY), kana = sp.kana;
   // 短い言葉（用語カードなど）は、AIの声だと発音が崩れたり説明をしゃべったりするので、スマホの読み上げで読む
-  if (text.replace(/[。、！？\s]/g, "").length <= 10) { sayLocal(kana || text); return; }
+  if (sp.text.replace(/[。、！？\s]/g, "").length <= 10) { sayLocal(kana); return; }
   if (S.getKey() && ttsOk()) {
     const my = ++playToken;
     stopPlayback();
     try {
       await getCtx().resume();
-      const buf = await getVoice("say:" + text, signal => liveSpeak(S.getKey(), text, { style: "日本語の先生が、はっきり自然に", reading, signal }));
+      const buf = await getVoice("say:" + sp.text, signal => liveSpeak(S.getKey(), sp.text, { style: "日本語の先生が、はっきり自然に", reading: sp.kanaOk ? kana : "", signal }));
       playBuffer(buf, my);
       return;
     } catch (e) {
       if (isAbort(e)) return;
       console.warn("TTS fallback", e); ttsFailAt = Date.now();
-      if (my === playToken && !isIOS) sayLocal(kana || text);   // Androidなどは、その場でスマホの読み上げに切り替える
+      if (my === playToken && !isIOS) sayLocal(kana);   // Androidなどは、その場でスマホの読み上げに切り替える
       return;
     }
   }
-  sayLocal(kana || text);
+  sayLocal(kana);
 }
 function sayLocal(text, rate = 0.85) {
   if (!window.speechSynthesis) return;
@@ -365,7 +368,7 @@ function renderHome(tab) {
 function phraseHtml(p) {
   const furi = S.getFurigana();
   const tr2 = L() === "ja" ? p.en : tr(p);
-  return `<li class="phrase">${sayBtn(p.furigana || p.ja)}<span class="jp">${esc(p.ja)}</span>
+  return `<li class="phrase">${sayBtn(p.ja, p.furigana)}<span class="jp">${esc(p.ja)}</span>
     ${furi ? `<span class="furi">${esc(p.furigana)}</span>` : ""}
     <span class="tr">${esc(tr2)}</span></li>`;
 }
@@ -853,7 +856,8 @@ const STYLE_PROMPT = {
   "現場のことば": "建設現場の職長が、大きな声ではっきり言う",
 };
 async function playVoice(d, slow) {
-  const local = () => sayLocal(d.say_kana || d.say, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
+  const sp = speechOf(d.say, d.say_kana, RUBY);
+  const local = () => sayLocal(sp.kana, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
   if (!S.getKey() || !ttsOk()) { local(); return; }
   const my = ++playToken;
   stopPlayback();   // 連打しても重ならないように
@@ -864,7 +868,7 @@ async function playVoice(d, slow) {
     const style = slow ? "外国人にもわかるように、とてもゆっくり、はっきり言う" : STYLE_PROMPT[d.style];
     // 漢字の文に読み方を添えて、会話と同じAIに読ませる
     const buf = await getVoice("drill:" + d.id + (slow ? ":slow" : ""),
-      signal => liveSpeak(S.getKey(), d.say, { style, reading: d.say_kana, voice: d.voice, signal }));
+      signal => liveSpeak(S.getKey(), sp.text, { style, reading: sp.kanaOk ? sp.kana : "", voice: d.voice, signal }));
     if ($st?.isConnected && my === playToken) $st.textContent = "";
     playBuffer(buf, my);
   } catch (e) {
@@ -1002,7 +1006,7 @@ function playScript(script) {
   const others = [...new Set(lines.map(l => l.who).filter(w => w && w !== "男" && w !== "女"))];
   const pitchOf = w => w === "男" ? 0.7 : w === "女" ? 1.3 : w ? [0.85, 1.2, 1.0, 0.75][others.indexOf(w) % 4] : 1;
   for (const l of lines) {
-    const u = new SpeechSynthesisUtterance(l.text);
+    const u = new SpeechSynthesisUtterance(speechOf(l.text, "", RUBY).kana);   // 漢字・数字・英字（Mサイズ・3時など）を読みにして読む
     u.lang = "ja-JP"; u.rate = 0.95; if (v) u.voice = v;
     u.pitch = pitchOf(l.who);
     speechSynthesis.speak(u);
@@ -1125,8 +1129,9 @@ function vmQuiz(o) {
     <section class="card vmq"><p class="note">${tx("vmQ_" + type)}</p>${prompt}</section>
     <div class="vmgrid">${opts.map((w, k) => `<button class="ans" data-k="${k}">${label(w)}</button>`).join("")}</div>
     <div id="res"></div>`);
-  if (type !== "reverse") sayLocal(v.reading);
-  document.getElementById("again")?.addEventListener("click", () => sayLocal(v.reading));
+  const vKana = speechOf(v.word, v.reading, RUBY).kana;   // 「〜ごろ」などの記号を外した読み
+  if (type !== "reverse") sayLocal(vKana);
+  document.getElementById("again")?.addEventListener("click", () => sayLocal(vKana));
   let done = false, timer;
   const answer = k => {
     if (done) return; done = true; clearTimeout(timer);
@@ -1226,7 +1231,7 @@ function renderExamQ(set, qs, i, results) {
       <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${tx("furigana")}</label></div>
     <p class="note">${jr(q.section)}</p>
     ${q.script ? `<button id="play" class="primary">▶ ${tx("listen")}（${tx("upTo2")}）</button>` : ""}
-    <section class="card"><p class="big exq">${examText(q)}</p>${q.say ? sayBtn(q.say) : ""}</section>
+    <section class="card"><p class="big exq">${examText(q)}</p>${q.say ? sayBtn(q.term || q.say, q.say) : ""}</section>
     ${q.choicesShown
       ? `<div class="answers ${q.choicesShown.length === 2 ? "ox" : ""}">${q.choicesShown.map((c, k) => `<button class="ans" data-k="${k}">${q.choicesShown.length > 2 ? k + 1 + ". " : ""}${choiceRuby ? jr(c) : esc(c)}</button>`).join("")}</div>`
       : `<button id="reveal" class="primary">${tx("showAnswer")}</button>`}
@@ -1296,7 +1301,7 @@ function renderReview() {
     <section class="card"><p>${bi("howToSay")}</p><p class="big">${esc(c.meaning || "…")}</p></section>
     <button id="say" class="primary big">🎙 ${tx("speak")}</button>
     <button id="reveal" class="sub">${tx("showAnswer")}</button>
-    <section id="ans" class="card" hidden><p class="big">${sayBtn(c.better_furigana || c.better)}<b>${esc(c.better)}</b></p>
+    <section id="ans" class="card" hidden><p class="big">${sayBtn(c.better, c.better_furigana)}<b>${esc(c.better)}</b></p>
       ${S.getFurigana() ? `<p class="furi">${esc(c.better_furigana)}</p>` : ""}
       <div class="row"><button id="ok" class="sub">✅ ${tx("gotIt")}</button><button id="ng" class="sub">🔁 ${tx("notYet")}</button></div></section>`);
   $app.querySelector(".back").onclick = renderHome;

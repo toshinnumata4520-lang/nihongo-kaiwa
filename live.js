@@ -124,7 +124,9 @@ export function liveSpeak(key, text, { style = "", reading = "", voice = "", sig
       model: `models/${LIVE_MODEL}`,
       systemInstruction: { parts: [{ text:
         "あなたは日本語の読み上げ係です。ユーザーから届く日本語のせりふを、一字一句そのまま、指定された話し方で声に出して読みます。" +
-        "せりふ以外のこと（あいさつ・説明・感想・返事）は一切言いません。せりふを変えたり足したりしません。" } ] },
+        "せりふ以外のこと（あいさつ・説明・感想・返事）は一切言いません。せりふを変えたり足したりしません。" +
+        "「読み方」が付いているときは、せりふの漢字・数字・英字を、その読み方のとおりの音で読みます（読み方を2回読んだり、別に読み上げたりはしません）。" +
+        "かっこ・記号の名前（かっこ、イコール、まる など）は読まず、区切りとして少し間をあけます。" } ] },
       generationConfig: { responseModalities: ["AUDIO"],
         ...(withVoice && voice ? { speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } } } : {}) },
     } }));
