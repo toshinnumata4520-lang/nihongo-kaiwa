@@ -1,18 +1,19 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610201306";
-import { SCENES } from "./scenes.js?v=202610201306";
-import { SITUATIONS } from "./situations.js?v=202610201306";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610201306";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610201306";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610201306";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610201306";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610201306";
-import { EXAMS } from "./exams.js?v=202610201306";
-import { RUBY } from "./ruby.js?v=202610201306";
-import { speechOf } from "./yomi.js?v=202610201306";
-import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610201306";
-import * as VM from "./vmaster.js?v=202610201306";
-import * as S from "./store.js?v=202610201306";
-import { autoSetup, preloadGis } from "./setup.js?v=202610201306";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610220053";
+import { SCENES } from "./scenes.js?v=202610220053";
+import { SITUATIONS } from "./situations.js?v=202610220053";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610220053";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610220053";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610220053";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610220053";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610220053";
+import { EXAMS } from "./exams.js?v=202610220053";
+import { RUBY } from "./ruby.js?v=202610220053";
+import { speechOf, cleanSpeech } from "./yomi.js?v=202610220053";
+import { SPEAK } from "./speak.js?v=202610220053";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610220053";
+import * as VM from "./vmaster.js?v=202610220053";
+import * as S from "./store.js?v=202610220053";
+import { autoSetup, preloadGis } from "./setup.js?v=202610220053";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -130,26 +131,30 @@ document.addEventListener("visibilitychange", () => {
 // お手本の声。キーがあればAIの自然な声、なければスマホの読み上げ。reading は全文ひらがなの読み方
 // 声に渡す文字列は yomi.js で作る：text は記号・出典を外した文、kana は数字・英字・記号まで読みにした全文の読み
 // （reading がなければ、手で書いた読み → ふりがな表 ruby.js の順に読みを作る）
+// スマホの読み上げに渡す文：全部ひらがなにするとアクセントが崩れるので、漢字まじりのまま渡す。
+// 端末がまちがえそうな読みだけ、make_speak.mjs で前もってひらがなにしてある（speak.js）。単語の間のすき間は外して、ひと続きの文として読ませる
+const joinJa = s => s.replace(/(?<=[^ -])[ 　]+(?=[^ -])/g, "");
+const localText = text => joinJa(cleanSpeech(SPEAK[text] ?? text));
 async function say(text, reading = "") {
-  const sp = speechOf(text, reading, RUBY), kana = sp.kana;
+  const sp = speechOf(text, reading, RUBY), kana = sp.kana, local = localText(text);
   // 短い言葉（用語カードなど）は、AIの声だと発音が崩れたり説明をしゃべったりするので、スマホの読み上げで読む
-  if (sp.text.replace(/[。、！？\s]/g, "").length <= 10) { sayLocal(kana); return; }
+  if (sp.text.replace(/[。、！？\s]/g, "").length <= 10) { sayLocal(local); return; }
   if (S.getKey() && ttsOk()) {
     const my = ++playToken;
     stopPlayback();
     try {
       await getCtx().resume();
-      const buf = await getVoice("say:" + sp.text, signal => liveSpeak(S.getKey(), sp.text, { style: "日本語の先生が、はっきり自然に", reading: sp.kanaOk ? kana : "", signal }));
+      const buf = await getVoice("say:" + sp.text, signal => liveSpeak(S.getKey(), joinJa(sp.text), { style: "日本語の先生が、はっきり自然に", reading: sp.kanaOk ? joinJa(kana) : "", signal }));
       playBuffer(buf, my);
       return;
     } catch (e) {
       if (isAbort(e)) return;
       console.warn("TTS fallback", e); ttsFailAt = Date.now();
-      if (my === playToken && !isIOS) sayLocal(kana);   // Androidなどは、その場でスマホの読み上げに切り替える
+      if (my === playToken && !isIOS) sayLocal(local);   // Androidなどは、その場でスマホの読み上げに切り替える
       return;
     }
   }
-  sayLocal(kana);
+  sayLocal(local);
 }
 function sayLocal(text, rate = 0.85) {
   if (!window.speechSynthesis) return;
@@ -161,7 +166,15 @@ function sayLocal(text, rate = 0.85) {
   speechSynthesis.speak(u);
 }
 // 日本語の声は、一覧があとから読み込まれる端末（Android）があるので、毎回さがす
-const jaVoice = () => { try { return speechSynthesis.getVoices().find(v => /^ja[-_]JP/i.test(v.lang)) || null; } catch { return null; } };
+// 自然に聞こえる声を優先する（Google・Apple の高音質・Microsoft の Natural など）
+const VOICE_RANK = [/natural|neural|online/i, /premium|enhanced|拡張/i, /google/i, /o-ren|kyoko|hattori|otoya/i, /nanami|keita|haruka|ayumi|ichiro|sayaka/i];
+const jaVoice = () => {
+  try {
+    const vs = speechSynthesis.getVoices().filter(v => /^ja[-_]JP/i.test(v.lang));
+    const score = v => { const i = VOICE_RANK.findIndex(r => r.test(v.name)); return i < 0 ? 99 : i; };
+    return vs.sort((a, b) => score(a) - score(b))[0] || null;
+  } catch { return null; }
+};
 const sayBtn = (text, reading = "") => `<button class="say" data-say="${esc(text)}" data-reading="${esc(reading)}" aria-label="${esc(t("listen"))}">🔊</button>`;
 
 const fmtAt = at => { const d = new Date(at); return `${S.localDate(d).slice(5)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -857,7 +870,7 @@ const STYLE_PROMPT = {
 };
 async function playVoice(d, slow) {
   const sp = speechOf(d.say, d.say_kana, RUBY);
-  const local = () => sayLocal(sp.kana, slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
+  const local = () => sayLocal(localText(d.say), slow ? 0.75 : d.style === "早口" || d.style === "略語" ? 1.3 : 1.1);
   if (!S.getKey() || !ttsOk()) { local(); return; }
   const my = ++playToken;
   stopPlayback();   // 連打しても重ならないように
@@ -868,7 +881,7 @@ async function playVoice(d, slow) {
     const style = slow ? "外国人にもわかるように、とてもゆっくり、はっきり言う" : STYLE_PROMPT[d.style];
     // 漢字の文に読み方を添えて、会話と同じAIに読ませる
     const buf = await getVoice("drill:" + d.id + (slow ? ":slow" : ""),
-      signal => liveSpeak(S.getKey(), sp.text, { style, reading: sp.kanaOk ? sp.kana : "", voice: d.voice, signal }));
+      signal => liveSpeak(S.getKey(), joinJa(sp.text), { style, reading: sp.kanaOk ? joinJa(sp.kana) : "", voice: d.voice, signal }));
     if ($st?.isConnected && my === playToken) $st.textContent = "";
     playBuffer(buf, my);
   } catch (e) {
@@ -1006,7 +1019,7 @@ function playScript(script) {
   const others = [...new Set(lines.map(l => l.who).filter(w => w && w !== "男" && w !== "女"))];
   const pitchOf = w => w === "男" ? 0.7 : w === "女" ? 1.3 : w ? [0.85, 1.2, 1.0, 0.75][others.indexOf(w) % 4] : 1;
   for (const l of lines) {
-    const u = new SpeechSynthesisUtterance(speechOf(l.text, "", RUBY).kana);   // 漢字・数字・英字（Mサイズ・3時など）を読みにして読む
+    const u = new SpeechSynthesisUtterance(localText(l.text));   // 漢字まじりのまま（まちがえやすい読みだけ speak.js でひらがな）
     u.lang = "ja-JP"; u.rate = 0.95; if (v) u.voice = v;
     u.pitch = pitchOf(l.who);
     speechSynthesis.speak(u);
@@ -1130,7 +1143,7 @@ function vmQuiz(o) {
     <section class="card vmq"><p class="note">${tx("vmQ_" + type)}</p>${prompt}</section>
     <div class="vmgrid">${opts.map((w, k) => `<button class="ans" data-k="${k}">${label(w)}</button>`).join("")}</div>
     <div id="res"></div>`);
-  const vKana = speechOf(v.word, v.reading, RUBY).kana;   // 「〜ごろ」などの記号を外した読み
+  const vKana = localText(v.word);   // 漢字のまま読ませる（端末がまちがえやすい語だけ speak.js で読みにしてある）
   if (type !== "reverse") sayLocal(vKana);
   document.getElementById("again")?.addEventListener("click", () => sayLocal(vKana));
   let done = false, timer;
