@@ -1,3 +1,4 @@
 qa/
 .devkey
 node_modules/
+voice_list.json

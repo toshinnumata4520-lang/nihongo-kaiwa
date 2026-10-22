@@ -1,19 +1,20 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610220053";
-import { SCENES } from "./scenes.js?v=202610220053";
-import { SITUATIONS } from "./situations.js?v=202610220053";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610220053";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610220053";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610220053";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610220053";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610220053";
-import { EXAMS } from "./exams.js?v=202610220053";
-import { RUBY } from "./ruby.js?v=202610220053";
-import { speechOf, cleanSpeech } from "./yomi.js?v=202610220053";
-import { SPEAK } from "./speak.js?v=202610220053";
-import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610220053";
-import * as VM from "./vmaster.js?v=202610220053";
-import * as S from "./store.js?v=202610220053";
-import { autoSetup, preloadGis } from "./setup.js?v=202610220053";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610220057";
+import { SCENES } from "./scenes.js?v=202610220057";
+import { SITUATIONS } from "./situations.js?v=202610220057";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610220057";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610220057";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610220057";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610220057";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610220057";
+import { EXAMS } from "./exams.js?v=202610220057";
+import { RUBY } from "./ruby.js?v=202610220057";
+import { speechOf, cleanSpeech } from "./yomi.js?v=202610220057";
+import { SPEAK } from "./speak.js?v=202610220057";
+import { VOICE } from "./voice.js?v=202610220057";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610220057";
+import * as VM from "./vmaster.js?v=202610220057";
+import * as S from "./store.js?v=202610220057";
+import { autoSetup, preloadGis } from "./setup.js?v=202610220057";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -135,7 +136,21 @@ document.addEventListener("visibilitychange", () => {
 // 端末がまちがえそうな読みだけ、make_speak.mjs で前もってひらがなにしてある（speak.js）。単語の間のすき間は外して、ひと続きの文として読ませる
 const joinJa = s => s.replace(/(?<=[^ -])[ 　]+(?=[^ -])/g, "");
 const localText = text => joinJa(cleanSpeech(SPEAK[text] ?? text));
+// 前もって作って点検した声のファイル（voice/）があれば、それを流す。どの端末でも同じ声になる
+function playFile(text) {
+  const f = VOICE[text];
+  if (!f) return false;
+  const my = ++playToken;
+  stopPlayback();
+  const ctx = getCtx(); ctx.resume();   // 押したその場で音を出せる状態にする（iPhone）
+  getVoice("file:" + f, () => fetch("voice/" + f).then(r => { if (!r.ok) throw new Error("voice " + r.status); return r.arrayBuffer(); })
+    .then(ab => ({ bytes: new Uint8Array(ab), isWav: true })))
+    .then(buf => playBuffer(buf, my))
+    .catch(e => { if (!isAbort(e) && my === playToken && !isIOS) sayLocal(localText(text)); });
+  return true;
+}
 async function say(text, reading = "") {
+  if (playFile(text)) return;
   const sp = speechOf(text, reading, RUBY), kana = sp.kana, local = localText(text);
   // 短い言葉（用語カードなど）は、AIの声だと発音が崩れたり説明をしゃべったりするので、スマホの読み上げで読む
   if (sp.text.replace(/[。、！？\s]/g, "").length <= 10) { sayLocal(local); return; }
@@ -1144,8 +1159,9 @@ function vmQuiz(o) {
     <div class="vmgrid">${opts.map((w, k) => `<button class="ans" data-k="${k}">${label(w)}</button>`).join("")}</div>
     <div id="res"></div>`);
   const vKana = localText(v.word);   // 漢字のまま読ませる（端末がまちがえやすい語だけ speak.js で読みにしてある）
-  if (type !== "reverse") sayLocal(vKana);
-  document.getElementById("again")?.addEventListener("click", () => sayLocal(vKana));
+  const sayWord = () => playFile(v.word) || sayLocal(vKana);
+  if (type !== "reverse") sayWord();
+  document.getElementById("again")?.addEventListener("click", sayWord);
   let done = false, timer;
   const answer = k => {
     if (done) return; done = true; clearTimeout(timer);
