@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>お手本の声チェック</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 12px 16px 80px; background: #fafaf7; color: #222; }
+  h1 { font-size: 20px; margin: 4px 0 8px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  select, button { font-size: 16px; padding: 6px 10px; }
+  .unit { margin: 16px 0 6px; font-weight: bold; color: #555; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid #e4e2dc; }
+  .row.bad { background: #ffe9e6; }
+  .row.cur { outline: 2px solid #4a7; }
+  .w { font-size: 20px; min-width: 6em; }
+  .y { color: #777; flex: 1; }
+  .play { width: 44px; height: 40px; }
+  .ok, .ng { font-size: 15px; padding: 6px 10px; border: 1px solid #bbb; background: #fff; border-radius: 6px; }
+  .row.isok .ok { background: #2e8b57; color: #fff; border-color: #2e8b57; }
+  .row.bad .ng { background: #c0392b; color: #fff; border-color: #c0392b; }
+  .row.isok { background: #eaf6ee; }
+  .none { color: #b55; font-size: 13px; }
+  #out { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid #ccc; padding: 8px 16px; display: flex; gap: 8px; align-items: center; }
+  #out span { flex: 1; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>お手本の声チェック</h1>
+<p style="margin:0 0 8px;font-size:14px;color:#555">AIの点検で合格した単語だけを並べています。▶で聞いて、○（良い）か×（変）を押してください。印はこの端末に残ります。</p>
+<div class="bar">
+  <select id="lv"><option value="n5">N5</option><option value="n4">N4</option><option value="n3">N3</option><option value="n2">N2</option></select>
+  <button id="all">続けて再生</button>
+  <button id="stop">止める</button>
+</div>
+<div id="list"></div>
+<div id="out"><span id="cnt"></span><button id="copy">×の語をコピー</button></div>
+<script type="module">
+import { VOCAB } from "./vocab.js?v=202610241522";
+import { VOICE } from "./voice.js?v=202610241522";
+const $ = id => document.getElementById(id);
+const KEY = "voicecheck_marks";
+let marks = {};   // 単語 → "ok" | "ng"
+try { marks = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch {}
+const saveMarks = () => { try { localStorage.setItem(KEY, JSON.stringify(marks)); } catch {} };
+const audio = new Audio();
+let rows = [], playing = false;
+
+function play(v, row) {
+  return new Promise(res => {
+    rows.forEach(r => r.classList.remove("cur")); row.classList.add("cur");
+    if (!VOICE[v.word]) return res();
+    audio.src = "voice/" + VOICE[v.word];
+    audio.onended = audio.onerror = () => res();
+    audio.play().catch(() => res());
+  });
+}
+function render() {
+  const lv = $("lv").value, list = $("list");
+  list.innerHTML = ""; rows = [];
+  const vs = VOCAB.filter(v => v.id.startsWith(lv + "-"));
+  vs.forEach((v, i) => {
+    if (i % 20 === 0) { const u = document.createElement("div"); u.className = "unit"; u.textContent = `ユニット${i / 20 + 1}`; list.append(u); }
+    if (!VOICE[v.word]) return;   // まだ合格していない語は出さない
+    const r = document.createElement("div");
+    const paint = () => { r.className = "row" + (marks[v.word] === "ok" ? " isok" : marks[v.word] === "ng" ? " bad" : ""); };
+    r.innerHTML = `<button class="play">▶</button><span class="w"></span><span class="y"></span><button class="ok">○</button><button class="ng">×</button>`;
+    r.querySelector(".w").textContent = v.word;
+    r.querySelector(".y").textContent = v.reading;
+    r.querySelector(".play").onclick = () => play(v, r);
+    const set = m => { if (marks[v.word] === m) delete marks[v.word]; else marks[v.word] = m; saveMarks(); paint(); count(); };
+    r.querySelector(".ok").onclick = () => set("ok");
+    r.querySelector(".ng").onclick = () => set("ng");
+    paint();
+    r._v = v; rows.push(r); list.append(r);
+  });
+  [...list.querySelectorAll(".unit")].forEach(u => { const n = u.nextElementSibling; if (!n || n.classList.contains("unit")) u.remove(); });
+  count();
+}
+function count() {
+  const all = Object.keys(VOICE).length, v = Object.values(marks);
+  $("cnt").textContent = `合格の声 ${all}語 ／ ○${v.filter(m => m === "ok").length} ×${v.filter(m => m === "ng").length}`;
+}
+$("lv").onchange = render;
+$("all").onclick = async () => {
+  playing = true;
+  const start = Math.max(0, rows.findIndex(r => r.classList.contains("cur")));
+  for (let i = start; i < rows.length && playing; i++) {
+    rows[i].scrollIntoView({ block: "center" });
+    await play(rows[i]._v, rows[i]);
+    await new Promise(r => setTimeout(r, 600));
+  }
+};
+$("stop").onclick = () => { playing = false; audio.pause(); };
+$("copy").onclick = async () => {
+  const t = Object.keys(marks).filter(w => marks[w] === "ng").join("、") || "（なし）";
+  try { await navigator.clipboard.writeText(t); $("copy").textContent = "コピーしました"; }
+  catch { prompt("この文をコピーしてください", t); }
+};
+render();
+</script>
+</body>
+</html>
