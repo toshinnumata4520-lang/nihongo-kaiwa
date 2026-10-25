@@ -27,7 +27,7 @@
 </head>
 <body>
 <h1>お手本の声チェック</h1>
-<p style="margin:0 0 8px;font-size:14px;color:#555">AIの点検で合格した単語だけを並べています。▶で聞いて、○（良い）か×（変）を押してください。印はこの端末に残ります。</p>
+<p style="margin:0 0 8px;font-size:14px;color:#555">声のある単語を並べています。N5はGoogleの読み上げ専用の声に作り直しました。★要確認は、AIの聞き取りで読みを確かめきれなかった語です。▶で聞いて、○（良い）か×（変）を押してください。印はこの端末に残ります。</p>
 <div class="bar">
   <select id="lv"><option value="n5">N5</option><option value="n4">N4</option><option value="n3">N3</option><option value="n2">N2</option></select>
   <button id="all">続けて再生</button>
@@ -37,10 +37,10 @@
 <div id="out"><span id="cnt"></span><button id="copy">×の語をコピー</button></div>
 <script type="module">
 import { VOCAB } from "./vocab.js?v=202610250042";
-import { VOICE } from "./voice.js?v=202610250042";
+import { VOICE, VOICE_CHECK } from "./voice.js?v=202610250042";
 const $ = id => document.getElementById(id);
-const KEY = "voicecheck_marks";
-let marks = {};   // 単語 → "ok" | "ng"
+const KEY = "voicecheck_marks2";
+let marks = {};   // 声のファイル名 → "ok" | "ng"（声を作り直したら印は消える）
 try { marks = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch {}
 const saveMarks = () => { try { localStorage.setItem(KEY, JSON.stringify(marks)); } catch {} };
 const audio = new Audio();
@@ -63,12 +63,13 @@ function render() {
     if (i % 20 === 0) { const u = document.createElement("div"); u.className = "unit"; u.textContent = `ユニット${i / 20 + 1}`; list.append(u); }
     if (!VOICE[v.word]) return;   // まだ合格していない語は出さない
     const r = document.createElement("div");
-    const paint = () => { r.className = "row" + (marks[v.word] === "ok" ? " isok" : marks[v.word] === "ng" ? " bad" : ""); };
+    const f = VOICE[v.word];
+    const paint = () => { r.className = "row" + (marks[f] === "ok" ? " isok" : marks[f] === "ng" ? " bad" : ""); };
     r.innerHTML = `<button class="play">▶</button><span class="w"></span><span class="y"></span><button class="ok">○</button><button class="ng">×</button>`;
     r.querySelector(".w").textContent = v.word;
-    r.querySelector(".y").textContent = v.reading;
+    r.querySelector(".y").textContent = v.reading + (VOICE_CHECK.includes(v.word) ? "　★要確認" : "") + (/g[.]mp3$/.test(f) ? "" : "　（前の声）");
     r.querySelector(".play").onclick = () => play(v, r);
-    const set = m => { if (marks[v.word] === m) delete marks[v.word]; else marks[v.word] = m; saveMarks(); paint(); count(); };
+    const set = m => { if (marks[f] === m) delete marks[f]; else marks[f] = m; marks[f] && (marks[f + "#w"] = v.word); saveMarks(); paint(); count(); };
     r.querySelector(".ok").onclick = () => set("ok");
     r.querySelector(".ng").onclick = () => set("ng");
     paint();
@@ -78,7 +79,7 @@ function render() {
   count();
 }
 function count() {
-  const all = Object.keys(VOICE).length, v = Object.values(marks);
+  const all = Object.keys(VOICE).length, v = Object.entries(marks).filter(([k]) => !k.endsWith("#w")).map(([, m]) => m);
   $("cnt").textContent = `合格の声 ${all}語 ／ ○${v.filter(m => m === "ok").length} ×${v.filter(m => m === "ng").length}`;
 }
 $("lv").onchange = render;
@@ -93,7 +94,7 @@ $("all").onclick = async () => {
 };
 $("stop").onclick = () => { playing = false; audio.pause(); };
 $("copy").onclick = async () => {
-  const t = Object.keys(marks).filter(w => marks[w] === "ng").join("、") || "（なし）";
+  const t = Object.keys(marks).filter(k => marks[k] === "ng").map(k => marks[k + "#w"]).join("、") || "（なし）";
   try { await navigator.clipboard.writeText(t); $("copy").textContent = "コピーしました"; }
   catch { prompt("この文をコピーしてください", t); }
 };
