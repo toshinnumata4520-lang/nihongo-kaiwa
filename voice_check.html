@@ -27,7 +27,7 @@
 </head>
 <body>
 <h1>お手本の声チェック</h1>
-<p style="margin:0 0 8px;font-size:14px;color:#555">声のある単語を並べています。N5はGoogleの読み上げ専用の声に作り直しました。★要確認は、AIの聞き取りで読みを確かめきれなかった語です。▶で聞いて、○（良い）か×（変）を押してください。印はこの端末に残ります。</p>
+<p style="margin:0 0 8px;font-size:14px;color:#555">声のある単語を並べています。N5はGoogleの読み上げ専用の声に作り直しました。★要確認は、AIの聞き取りで読みを確かめきれなかった語です。▶で聞くと自動で○が付きます。変な発音だったら×を押してください。印はこの端末に残ります。</p>
 <div class="bar">
   <select id="lv"><option value="n5">N5</option><option value="n4">N4</option><option value="n3">N3</option><option value="n2">N2</option></select>
   <button id="all">続けて再生</button>
@@ -49,6 +49,7 @@ let rows = [], playing = false;
 function play(v, row) {
   return new Promise(res => {
     rows.forEach(r => r.classList.remove("cur")); row.classList.add("cur");
+    row._auto && row._auto();   // 再生したら○（まだ印がないときだけ）
     if (!VOICE[v.word]) return res();
     audio.src = "voice/" + VOICE[v.word];
     audio.onended = audio.onerror = () => res();
@@ -70,6 +71,7 @@ function render() {
     r.querySelector(".y").textContent = v.reading + (VOICE_CHECK.includes(v.word) ? "　★要確認" : "") + (/g[.]mp3$/.test(f) ? "" : "　（前の声）");
     r.querySelector(".play").onclick = () => play(v, r);
     const set = m => { if (marks[f] === m) delete marks[f]; else marks[f] = m; marks[f] && (marks[f + "#w"] = v.word); saveMarks(); paint(); count(); };
+    r._auto = () => { if (!marks[f]) set("ok"); };
     r.querySelector(".ok").onclick = () => set("ok");
     r.querySelector(".ng").onclick = () => set("ng");
     paint();
