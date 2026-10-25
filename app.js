@@ -1,20 +1,20 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610250221";
-import { SCENES } from "./scenes.js?v=202610250221";
-import { SITUATIONS } from "./situations.js?v=202610250221";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610250221";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610250221";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610250221";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610250221";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610250221";
-import { EXAMS } from "./exams.js?v=202610250221";
-import { RUBY } from "./ruby.js?v=202610250221";
-import { speechOf, cleanSpeech } from "./yomi.js?v=202610250221";
-import { SPEAK } from "./speak.js?v=202610250221";
-import { VOICE } from "./voice.js?v=202610250221";
-import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610250221";
-import * as VM from "./vmaster.js?v=202610250221";
-import * as S from "./store.js?v=202610250221";
-import { autoSetup, preloadGis } from "./setup.js?v=202610250221";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610250249";
+import { SCENES } from "./scenes.js?v=202610250249";
+import { SITUATIONS } from "./situations.js?v=202610250249";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610250249";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610250249";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610250249";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610250249";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610250249";
+import { EXAMS } from "./exams.js?v=202610250249";
+import { RUBY } from "./ruby.js?v=202610250249";
+import { speechOf, cleanSpeech } from "./yomi.js?v=202610250249";
+import { SPEAK } from "./speak.js?v=202610250249";
+import { VOICE } from "./voice.js?v=202610250249";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610250249";
+import * as VM from "./vmaster.js?v=202610250249";
+import * as S from "./store.js?v=202610250249";
+import { autoSetup, preloadGis } from "./setup.js?v=202610250249";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -49,6 +49,7 @@ const sceneGoal = sc => L() === "ja" ? sc.goal_ja : tr(sc.goal) || sc.goal_ja;
 // （「画面を変えても音声が流れ続ける」への対応）。playToken は、作りかけの声が後から別の画面で鳴るのを防ぐ番号
 let playToken = 0;
 const playingSources = new Set();
+const fileAudio = new Audio();   // 前もって作った声のファイルを鳴らす
 let currentRec = null;
 let activeTalkFinish = null;
 let voiceAbort = new AbortController();   // 作りかけの声（liveSpeak）を、画面の切り替えで止める
@@ -63,6 +64,7 @@ const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platfor
 function stopPlayback() {
   for (const s of playingSources) try { s.stop(); } catch {}
   playingSources.clear();
+  try { if (!fileAudio.paused) fileAudio.pause(); } catch {}
   // iPhoneは cancel のすぐあとの speak が鳴らないことがあるので、読み上げ中のときだけ止める
   try { if (window.speechSynthesis && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel(); } catch {}
 }
@@ -137,16 +139,17 @@ document.addEventListener("visibilitychange", () => {
 const joinJa = s => s.replace(/(?<=[^ -])[ 　]+(?=[^ -])/g, "");
 const localText = text => joinJa(cleanSpeech(SPEAK[text] ?? text));
 // 前もって作って点検した声のファイル（voice/）があれば、それを流す。どの端末でも同じ声になる
+// 押したその場で <audio>（fileAudio）に渡して鳴らす（あとから鳴らすと、iPhoneなどでは止められて無音になることがある）
 function playFile(text) {
   const f = VOICE[text];
   if (!f) return false;
-  const my = ++playToken;
+  ++playToken;
   stopPlayback();
-  const ctx = getCtx(); ctx.resume();   // 押したその場で音を出せる状態にする（iPhone）
-  getVoice("file:" + f, () => fetch("voice/" + f).then(r => { if (!r.ok) throw new Error("voice " + r.status); return r.arrayBuffer(); })
-    .then(ab => ({ bytes: new Uint8Array(ab), isWav: true })))
-    .then(buf => playBuffer(buf, my))
-    .catch(e => { if (!isAbort(e) && my === playToken && !isIOS) sayLocal(localText(text)); });
+  if (!activeTalkFinish) audioMode("playback");
+  fileAudio.onloadedmetadata = () => muteFor(fileAudio.duration * 1000 + 400);   // 会話中なら、この声をマイクが拾わないようにする
+  fileAudio.onerror = () => { if (!isIOS) sayLocal(localText(text)); };
+  fileAudio.src = "voice/" + f;
+  fileAudio.play().catch(() => {});   // 読めなかったときは onerror でスマホの読み上げに切り替える
   return true;
 }
 async function say(text, reading = "") {
