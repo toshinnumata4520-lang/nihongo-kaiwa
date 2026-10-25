@@ -80,7 +80,7 @@ function render() {
   count();
 }
 function count() {
-  const all = Object.keys(VOICE).length, v = Object.entries(marks).filter(([k]) => !k.endsWith("#w")).map(([, m]) => m);
+  const all = Object.keys(VOICE).length, v = Object.entries(marks).filter(([k]) => !k.endsWith("#w") && VOICE[marks[k + "#w"]] === k).map(([, m]) => m);
   $("cnt").textContent = `合格の声 ${all}語 ／ ○${v.filter(m => m === "ok").length} ×${v.filter(m => m === "ng").length}`;
 }
 $("lv").onchange = render;
@@ -91,14 +91,15 @@ async function playFrom(start) {
     rows[i].scrollIntoView({ block: "center", behavior: "smooth" });
     await play(rows[i]._v, rows[i]);
     if (run !== me) return;
-    await new Promise(r => setTimeout(r, 700));
+    await new Promise(r => setTimeout(r, 250));
   }
   if (run === me) playing = false;
 }
 $("all").onclick = () => playFrom(Math.max(0, rows.findIndex(r => r.classList.contains("cur"))));
 $("stop").onclick = () => { playing = false; run++; audio.pause(); };
 $("copy").onclick = async () => {
-  const t = Object.keys(marks).filter(k => marks[k] === "ng").map(k => marks[k + "#w"]).join("、") || "（なし）";
+  // 今の声の印だけ（作り直す前の声の×は出さない）
+  const t = Object.keys(marks).filter(k => marks[k] === "ng" && VOICE[marks[k + "#w"]] === k).map(k => marks[k + "#w"]).join("、") || "（なし）";
   try { await navigator.clipboard.writeText(t); $("copy").textContent = "コピーしました"; }
   catch { prompt("この文をコピーしてください", t); }
 };
