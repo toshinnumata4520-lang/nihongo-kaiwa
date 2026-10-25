@@ -17,6 +17,7 @@
   .c button { font-size: 15px; }
   .play { width: 46px; height: 40px; font-size: 18px; }
   .none { font-size: 13px; }
+  .memo { width: 100%; box-sizing: border-box; font-size: 15px; padding: 6px; margin-top: 8px; }
   #out { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid #ccc; padding: 8px 16px; display: flex; gap: 8px; align-items: center; }
   #out span { flex: 1; font-size: 13px; }
   #out button { font-size: 15px; padding: 8px 10px; }
@@ -24,7 +25,7 @@
 </head>
 <body>
 <h1>声の選び直し</h1>
-<p>×になった語・例文を、読ませ方を変えて何通りか作りました。▶で聞いて、一番いいものの「これ」を押してください。どれもだめなら「全部だめ」を押してください。終わったら下の「選んだ結果をコピー」を押して、貼ってください。</p>
+<p>×になった語・例文を、読ませ方を変えて何通りか作りました。▶で聞いて、一番いいものの「これ」を押してください。どれもだめなら「全部だめ」を押してください。気になる点は、下の欄に書いてください。終わったら下の「選んだ結果をコピー」を押して、貼ってください。</p>
 <div id="list"></div>
 <div id="out"><span id="cnt"></span><button id="copy">選んだ結果をコピー</button></div>
 <script type="module">
@@ -60,12 +61,16 @@ function render() {
     no.innerHTML = `<span class="none">どれも変</span><button class="sel">全部だめ</button>`;
     no.querySelector(".sel").onclick = () => { pick[w] = "全部だめ"; save(); render(); };
     g.append(no);
-    $("list").append(h, g);
+    const memo = document.createElement("input"); memo.className = "memo";
+    memo.placeholder = "何がダメ？（例：上がり下がり、読み、区切り）";
+    memo.value = pick[w + "#memo"] || "";
+    memo.oninput = () => { if (memo.value.trim()) pick[w + "#memo"] = memo.value.trim(); else delete pick[w + "#memo"]; save(); };
+    $("list").append(h, g, memo);
   }
-  $("cnt").textContent = `選んだ：${Object.keys(pick).filter(w => list[w]).length} / ${Object.keys(list).length}語`;
+  $("cnt").textContent = `選んだ：${Object.keys(pick).filter(w => list[w] && !w.includes("#")).length} / ${Object.keys(list).length}語`;
 }
 $("copy").onclick = async () => {
-  const t = Object.keys(list).map(w => `${w.replace(/ /g, "")}=${pick[w] || "未選択"}`).join(" ／ ");
+  const t = Object.keys(list).map(w => `${w.replace(/ /g, "")}=${pick[w] || "未選択"}` + (pick[w + "#memo"] ? `【${pick[w + "#memo"]}】` : "")).join(" ／ ");
   try { await navigator.clipboard.writeText(t); $("copy").textContent = "コピーしました"; }
   catch { prompt("この文をコピーしてください", t); }
 };

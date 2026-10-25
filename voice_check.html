@@ -12,6 +12,10 @@
   .unit { margin: 16px 0 6px; font-weight: bold; color: #555; }
   .row { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid #e4e2dc; }
   .row.bad { background: #ffe9e6; }
+  .row { flex-wrap: wrap; }
+  .note { display: none; width: 100%; margin: 4px 0 0 54px; }
+  .row.bad .note { display: block; }
+  .note input { width: calc(100% - 70px); font-size: 15px; padding: 6px; }
   .row.cur { outline: 2px solid #4a7; }
   .w { font-size: 20px; min-width: 6em; }
   .y { color: #777; flex: 1; }
@@ -29,7 +33,7 @@
 </head>
 <body>
 <h1>お手本の声チェック</h1>
-<p style="margin:0 0 8px;font-size:14px;color:#555">声のある単語・例文を並べています（上で切りかえ）。★要確認は、AIの聞き取りで読みを確かめきれなかった語です。下の「▶ 連続再生」で全部を順に流します。どの語の▶を押しても、そこから続けて流れます。流れた語には自動で○が付くので、変な発音だったら×を押してください。印はこの端末に残ります。</p>
+<p style="margin:0 0 8px;font-size:14px;color:#555">声のある単語・例文を並べています（上で切りかえ）。★要確認は、AIの聞き取りで読みを確かめきれなかった語です。下の「▶ 連続再生」で全部を順に流します。どの語の▶を押しても、そこから続けて流れます。流れた語には自動で○が付くので、変な発音だったら×を押して、何がダメかを書いてください。印はこの端末に残ります。</p>
 <div class="bar">
   <select id="lv"><option value="n5">N5 単語</option><option value="n4">N4 単語</option><option value="n3">N3 単語</option><option value="n2">N2 単語</option>
     <option value="spot">抜き打ち 例文20</option><option value="chkex">★要確認の例文</option>
@@ -88,7 +92,11 @@ function addRow(v, key, ex, list) {
     const r = document.createElement("div");
     const f = VOICE[key];
     const paint = () => { r.className = "row" + (marks[f] === "ok" ? " isok" : marks[f] === "ng" ? " bad" : ""); };
-    r.innerHTML = `<button class="play">▶</button><span class="w"></span><span class="y"></span><button class="ok">○</button><button class="ng">×</button>`;
+    r.innerHTML = `<button class="play">▶</button><span class="w"></span><span class="y"></span><button class="ok">○</button><button class="ng">×</button>` +
+      `<div class="note"><input placeholder="何がダメ？（例：「ふって」の上がり下がり、読みがちがう、区切り）"></div>`;
+    const memo = r.querySelector(".note input");
+    memo.value = marks[f + "#memo"] || "";
+    memo.oninput = () => { if (memo.value.trim()) marks[f + "#memo"] = memo.value.trim(); else delete marks[f + "#memo"]; saveMarks(); };
     r.querySelector(".w").textContent = ex ? key.replace(/ /g, "") : v.word;
     if (ex) r.querySelector(".w").classList.add("s");
     r.querySelector(".y").textContent = (ex ? "" : v.reading) + (VOICE_CHECK.includes(key) ? "　★要確認" : "") + (/[ge][0-9]?[.]mp3$/.test(f) ? "" : "　（前の声）");
@@ -101,7 +109,7 @@ function addRow(v, key, ex, list) {
     r._v = v; r._key = key; rows.push(r); list.append(r);
 }
 function count() {
-  const all = Object.keys(VOICE).length, v = Object.entries(marks).filter(([k]) => !k.endsWith("#w") && VOICE[marks[k + "#w"]] === k).map(([, m]) => m);
+  const all = Object.keys(VOICE).length, v = Object.entries(marks).filter(([k]) => !k.includes("#") && VOICE[marks[k + "#w"]] === k).map(([, m]) => m);
   $("cnt").textContent = `声 ${all}件 ／ ○${v.filter(m => m === "ok").length} ×${v.filter(m => m === "ng").length}`;
 }
 $("lv").onchange = render;
@@ -120,7 +128,8 @@ $("all").onclick = () => playFrom(Math.max(0, rows.findIndex(r => r.classList.co
 $("stop").onclick = () => { playing = false; run++; audio.pause(); };
 $("copy").onclick = async () => {
   // 今の声の印だけ（作り直す前の声の×は出さない）
-  const t = Object.keys(marks).filter(k => marks[k] === "ng" && VOICE[marks[k + "#w"]] === k).map(k => marks[k + "#w"].replace(/ /g, "")).join(" ／ ") || "（なし）";
+  const t = Object.keys(marks).filter(k => marks[k] === "ng" && VOICE[marks[k + "#w"]] === k)
+    .map(k => marks[k + "#w"].replace(/ /g, "") + (marks[k + "#memo"] ? `【${marks[k + "#memo"]}】` : "")).join(" ／ ") || "（なし）";
   try { await navigator.clipboard.writeText(t); $("copy").textContent = "コピーしました"; }
   catch { prompt("この文をコピーしてください", t); }
 };
