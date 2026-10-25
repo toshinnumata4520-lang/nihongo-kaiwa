@@ -127,6 +127,8 @@ async function playFrom(start) {
 $("all").onclick = () => playFrom(Math.max(0, rows.findIndex(r => r.classList.contains("cur"))));
 $("stop").onclick = () => { playing = false; run++; audio.pause(); };
 $("copy").onclick = async () => {
+  // コピーする直前に、いちばん新しい声の一覧を読み直す（作り直した声に付いていた古い×は出さない）
+  try { Object.assign(VOICE, (await import("./voice.js?t=" + Date.now())).VOICE); } catch {}
   // 今の声の印だけ（作り直す前の声の×は出さない）
   const t = Object.keys(marks).filter(k => marks[k] === "ng" && VOICE[marks[k + "#w"]] === k)
     .map(k => marks[k + "#w"].replace(/ /g, "") + (marks[k + "#memo"] ? `【${marks[k + "#memo"]}】` : "")).join(" ／ ") || "（なし）";
