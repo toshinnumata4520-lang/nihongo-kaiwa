@@ -35,8 +35,8 @@
 <div id="list"></div>
 <div id="out"><button id="all">▶ 連続再生</button><button id="stop">■ 停止</button><span id="cnt"></span><button id="copy">×の語をコピー</button></div>
 <script type="module">
-import { VOCAB } from "./vocab.js?v=202610250112";
-import { VOICE, VOICE_CHECK } from "./voice.js?v=202610250112";
+import { VOCAB } from "./vocab.js?v=202610250119";
+import { VOICE, VOICE_CHECK } from "./voice.js?v=202610250119";
 const $ = id => document.getElementById(id);
 const KEY = "voicecheck_marks2";
 let marks = {};   // 声のファイル名 → "ok" | "ng"（声を作り直したら印は消える）
@@ -67,7 +67,7 @@ function render() {
     const paint = () => { r.className = "row" + (marks[f] === "ok" ? " isok" : marks[f] === "ng" ? " bad" : ""); };
     r.innerHTML = `<button class="play">▶</button><span class="w"></span><span class="y"></span><button class="ok">○</button><button class="ng">×</button>`;
     r.querySelector(".w").textContent = v.word;
-    r.querySelector(".y").textContent = v.reading + (VOICE_CHECK.includes(v.word) ? "　★要確認" : "") + (/g[.]mp3$/.test(f) ? "" : "　（前の声）");
+    r.querySelector(".y").textContent = v.reading + (VOICE_CHECK.includes(v.word) ? "　★要確認" : "") + (/g2?[.]mp3$/.test(f) ? "" : "　（前の声）");
     r.querySelector(".play").onclick = () => playFrom(rows.indexOf(r));   // その語から続けて再生
     const set = m => { if (marks[f] === m) delete marks[f]; else marks[f] = m; marks[f] && (marks[f + "#w"] = v.word); saveMarks(); paint(); count(); };
     r._auto = () => { if (!marks[f]) set("ok"); };
