@@ -32,13 +32,14 @@
 <p style="margin:0 0 8px;font-size:14px;color:#555">声のある単語・例文を並べています（上で切りかえ）。★要確認は、AIの聞き取りで読みを確かめきれなかった語です。下の「▶ 連続再生」で全部を順に流します。どの語の▶を押しても、そこから続けて流れます。流れた語には自動で○が付くので、変な発音だったら×を押してください。印はこの端末に残ります。</p>
 <div class="bar">
   <select id="lv"><option value="n5">N5 単語</option><option value="n4">N4 単語</option><option value="n3">N3 単語</option><option value="n2">N2 単語</option>
+    <option value="spot">抜き打ち 例文20</option><option value="chkex">★要確認の例文</option>
     <option value="n5ex">N5 例文</option><option value="n4ex">N4 例文</option><option value="n3ex">N3 例文</option><option value="n2ex">N2 例文</option></select>
 </div>
 <div id="list"></div>
 <div id="out"><button id="all">▶ 連続再生</button><button id="stop">■ 停止</button><span id="cnt"></span><button id="copy">×をコピー</button></div>
 <script type="module">
-import { VOCAB } from "./vocab.js?v=202610250249";
-import { VOICE, VOICE_CHECK } from "./voice.js?v=202610250249";
+import { VOCAB } from "./vocab.js?v=202610250255";
+import { VOICE, VOICE_CHECK } from "./voice.js?v=202610250255";
 const $ = id => document.getElementById(id);
 const KEY = "voicecheck_marks2";
 let marks = {};   // 声のファイル名 → "ok" | "ng"（声を作り直したら印は消える）
@@ -60,6 +61,18 @@ function play(v, row) {
 function render() {
   const sel = $("lv").value, ex = sel.endsWith("ex"), lv = sel.replace("ex", ""), list = $("list");
   list.innerHTML = ""; rows = [];
+  if (sel === "spot" || sel === "chkex") {   // 例文をレベルをまたいで選ぶ
+    const all = VOCAB.flatMap(v => v.ex.map(e => [v, e.ja])).filter(([, k]) => VOICE[k]);
+    let pick;
+    if (sel === "chkex") pick = all.filter(([, k]) => VOICE_CHECK.includes(k));
+    else {   // 毎回同じ20文（決まった順の乱数）
+      let x = 20261025; const rnd = () => (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648;
+      const pool = all.filter(([, k]) => !VOICE_CHECK.includes(k));
+      pick = Array.from({ length: 20 }, () => pool.splice(Math.floor(rnd() * pool.length), 1)[0]);
+    }
+    for (const [v, k] of pick) addRow(v, k, true, list);
+    count(); return;
+  }
   const vs = VOCAB.filter(v => v.id.startsWith(lv + "-"));
   vs.forEach((v, i) => {
     if (i % 20 === 0) { const u = document.createElement("div"); u.className = "unit"; u.textContent = `ユニット${i / 20 + 1}`; list.append(u); }
@@ -98,7 +111,7 @@ async function playFrom(start) {
     rows[i].scrollIntoView({ block: "center", behavior: "smooth" });
     await play(rows[i]._v, rows[i]);
     if (run !== me) return;
-    await new Promise(r => setTimeout(r, $("lv").value.endsWith("ex") ? 600 : 250));
+    await new Promise(r => setTimeout(r, /ex|spot/.test($("lv").value) ? 600 : 250));
   }
   if (run === me) playing = false;
 }
