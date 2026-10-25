@@ -32,7 +32,7 @@
 import { VOCAB } from "./vocab.js?v=202610251221";
 import { VOICE } from "./voice.js?v=202610251221";
 const $ = id => document.getElementById(id);
-const KEY = "voicefix_pick18";
+const KEY = "voicefix_pick19";
 let pick = {};
 try { pick = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(pick)); } catch {} };
