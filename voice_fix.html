@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>声の選び直し</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 12px 16px 80px; background: #fafaf7; color: #222; }
+  h1 { font-size: 20px; margin: 4px 0 6px; }
+  p { font-size: 14px; color: #555; margin: 0 0 10px; }
+  h2 { font-size: 22px; margin: 18px 0 6px; }
+  h2 small { font-size: 14px; color: #777; font-weight: normal; }
+  .g { display: flex; flex-wrap: wrap; gap: 8px; }
+  .c { display: flex; flex-direction: column; align-items: center; gap: 4px; border: 1px solid #ddd; border-radius: 8px; padding: 6px; background: #fff; min-width: 76px; }
+  .c.pick { border-color: #2e8b57; background: #eaf6ee; }
+  .c span { font-size: 13px; }
+  .c button { font-size: 15px; }
+  .play { width: 46px; height: 40px; font-size: 18px; }
+  .none { font-size: 13px; }
+  #out { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid #ccc; padding: 8px 16px; display: flex; gap: 8px; align-items: center; }
+  #out span { flex: 1; font-size: 13px; }
+  #out button { font-size: 15px; padding: 8px 10px; }
+</style>
+</head>
+<body>
+<h1>声の選び直し</h1>
+<p>×になった語を、読ませ方を変えて何通りか作りました。▶で聞いて、一番いいものの「これ」を押してください。どれもだめなら「全部だめ」を押してください。終わったら下の「選んだ結果をコピー」を押して、貼ってください。</p>
+<div id="list"></div>
+<div id="out"><span id="cnt"></span><button id="copy">選んだ結果をコピー</button></div>
+<script type="module">
+import { VOCAB } from "./vocab.js?v=202610250112";
+import { VOICE } from "./voice.js?v=202610250112";
+const $ = id => document.getElementById(id);
+const KEY = "voicefix_pick";
+let pick = {};
+try { pick = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(pick)); } catch {} };
+const audio = new Audio();
+const list = await (await fetch("voice_try/fix/list.json", { cache: "no-store" })).json();
+function render() {
+  $("list").innerHTML = "";
+  for (const [w, ways] of Object.entries(list)) {
+    const v = VOCAB.find(x => x.word === w);
+    const h = document.createElement("h2"); h.innerHTML = `${w} <small></small>`; h.querySelector("small").textContent = v ? v.reading : "";
+    const g = document.createElement("div"); g.className = "g";
+    const opts = [["今の声", VOICE[w] ? "voice/" + VOICE[w] : null], ...ways.map(k => [k, `voice_try/fix/${w}_${k}.mp3`])];
+    for (const [k, src] of opts) {
+      if (!src) continue;
+      const c = document.createElement("div"); c.className = "c" + (pick[w] === k ? " pick" : "");
+      c.innerHTML = `<button class="play">▶</button><span></span><button class="sel">これ</button>`;
+      c.querySelector("span").textContent = k;
+      c.querySelector(".play").onclick = () => { audio.src = src; audio.play(); };
+      c.querySelector(".sel").onclick = () => { pick[w] = k; save(); render(); };
+      g.append(c);
+    }
+    const no = document.createElement("div"); no.className = "c" + (pick[w] === "全部だめ" ? " pick" : "");
+    no.innerHTML = `<span class="none">どれも変</span><button class="sel">全部だめ</button>`;
+    no.querySelector(".sel").onclick = () => { pick[w] = "全部だめ"; save(); render(); };
+    g.append(no);
+    $("list").append(h, g);
+  }
+  $("cnt").textContent = `選んだ：${Object.keys(pick).filter(w => list[w]).length} / ${Object.keys(list).length}語`;
+}
+$("copy").onclick = async () => {
+  const t = Object.keys(list).map(w => `${w}=${pick[w] || "未選択"}`).join("、");
+  try { await navigator.clipboard.writeText(t); $("copy").textContent = "コピーしました"; }
+  catch { prompt("この文をコピーしてください", t); }
+};
+render();
+</script>
+</body>
+</html>
