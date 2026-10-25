@@ -28,10 +28,10 @@
 <div id="list"></div>
 <div id="out"><span id="cnt"></span><button id="copy">選んだ結果をコピー</button></div>
 <script type="module">
-import { VOCAB } from "./vocab.js?v=202610250255";
-import { VOICE } from "./voice.js?v=202610250255";
+import { VOCAB } from "./vocab.js?v=202610250328";
+import { VOICE } from "./voice.js?v=202610250328";
 const $ = id => document.getElementById(id);
-const KEY = "voicefix_pick10";
+const KEY = "voicefix_pick11";
 let pick = {};
 try { pick = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch {}
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(pick)); } catch {} };
