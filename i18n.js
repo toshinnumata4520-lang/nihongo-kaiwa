@@ -1,4 +1,4 @@
-import { EXTRA } from "./lang_extra.js?v=202610271535";
+import { EXTRA } from "./lang_extra.js?v=202610251248";
 // 画面の言葉。日本語は「やさしい日本語」。ベトナム語は仮訳（教材担当の確認待ち）。
 const T = {
   appName:      { ja: "しごとの日本語れんしゅう", en: "Work Japanese Practice", vi: "Luyện tiếng Nhật công việc" },
@@ -58,8 +58,6 @@ const T = {
   s_correct:    { ja: "ただしさ", en: "Accuracy", vi: "Chính xác" },
   s_smooth:     { ja: "なめらかさ", en: "Fluency", vi: "Trôi chảy" },
   oneFix:       { ja: "いちばん 大事な なおし", en: "The most important fix", vi: "Điều cần sửa quan trọng nhất" },
-  advice:       { ja: "きょうの ひとこと", en: "Today's advice", vi: "Lời khuyên hôm nay" },
-  sceneVocab:   { ja: "この 場面の ことばの レベル", en: "Word level for this scene", vi: "Trình độ từ vựng của tình huống này" },
   youSaid:      { ja: "あなた", en: "You said", vi: "Bạn nói" },
   better:       { ja: "こう 言うと いい", en: "Better", vi: "Nên nói" },
   retry:        { ja: "もう一度 言って みる", en: "Say it again", vi: "Thử nói lại" },
