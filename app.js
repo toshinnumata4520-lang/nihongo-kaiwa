@@ -1,20 +1,20 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610271535";
-import { SCENES } from "./scenes.js?v=202610271535";
-import { SITUATIONS } from "./situations.js?v=202610271535";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610271535";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610271535";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610271535";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610271535";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610271535";
-import { EXAMS } from "./exams.js?v=202610271535";
-import { RUBY } from "./ruby.js?v=202610271535";
-import { speechOf, cleanSpeech } from "./yomi.js?v=202610271535";
-import { SPEAK } from "./speak.js?v=202610271535";
-import { VOICE } from "./voice.js?v=202610271535";
-import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610271535";
-import * as VM from "./vmaster.js?v=202610271535";
-import * as S from "./store.js?v=202610271535";
-import { autoSetup, preloadGis } from "./setup.js?v=202610271535";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610271942";
+import { SCENES } from "./scenes.js?v=202610271942";
+import { SITUATIONS } from "./situations.js?v=202610271942";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610271942";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610271942";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610271942";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610271942";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610271942";
+import { EXAMS } from "./exams.js?v=202610271942";
+import { RUBY } from "./ruby.js?v=202610271942";
+import { speechOf, cleanSpeech } from "./yomi.js?v=202610271942";
+import { SPEAK } from "./speak.js?v=202610271942";
+import { VOICE } from "./voice.js?v=202610271942";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610271942";
+import * as VM from "./vmaster.js?v=202610271942";
+import * as S from "./store.js?v=202610271942";
+import { autoSetup, preloadGis } from "./setup.js?v=202610271942";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -239,9 +239,12 @@ const INDUSTRY = {
   "飲食": { icon: "🍽️", furi: "いんしょく", en: "Restaurant", vi: "Nhà hàng" },
   "放送": { icon: "📢", furi: "ほうそう", en: "Announcements", vi: "Thông báo" },
 };
+// 言い回しを竹澤さんが確認中のもの（確認が済んだら消す）
+const REVIEWING = new Set(["interview_self_intro", "talk_happy_week", "food_late_apology", "care_meal_assist", "factory_ask_procedure", "放送", "advice"]);
+const reviewTag = k => REVIEWING.has(k) ? `<span class="tag review">確認中</span>` : "";
 function industryLabel(i) {
   const x = INDUSTRY[i] || { icon: "", furi: "" };
-  return `<span class="indicon">${x.icon}</span><ruby>${esc(i)}<rt>${esc(x.furi)}</rt></ruby>${L() !== "ja" && tr(x) ? `<small>${esc(tr(x))}</small>` : ""}`;
+  return `<span class="indicon">${x.icon}</span><ruby>${esc(i)}<rt>${esc(x.furi)}</rt></ruby>${L() !== "ja" && tr(x) ? `<small>${esc(tr(x))}</small>` : ""}${reviewTag(i)}`;
 }
 
 // AIの準備（キー）がまだのとき：開発者向けの設定画面に飛ばさず、やさしく説明して、すぐできる練習へ案内する
@@ -295,7 +298,7 @@ function sceneButton(sc, short = false) {
     <span class="badge ${st}">${tx(STATUS_LABEL[st])}</span>
     <span class="title">${L() === "ja" ? jr(ja) : esc(sceneTitle(sc))}</span>
     ${L() !== "ja" ? `<span class="ja">${jr(ja)}</span>` : ""}
-    <span class="level">${esc(sc.level)}</span>
+    <span class="level">${esc(sc.level)}</span>${reviewTag(sc.id)}
   </button>`;
 }
 // つぎのおすすめ：まだ「できた」になっていない場面のうち、練習中のもの → まだのもの の順
@@ -473,7 +476,7 @@ function renderPrep(sc) {
   const lv = getLevel(sc), rec = recommendLevel(sc);
   show(`
     <button class="back link">← ${tx("home")}</button>
-    <h1>${L() === "ja" ? jr(sc.title_ja) : esc(sceneTitle(sc))}</h1>
+    <h1>${L() === "ja" ? jr(sc.title_ja) : esc(sceneTitle(sc))}${reviewTag(sc.id)}</h1>
     <section class="card goal">
       <h2>${bi("todayGoal")}</h2>
       <p class="big">${L() === "ja" ? jr(sc.goal_ja) : esc(sceneGoal(sc))}</p>
@@ -736,7 +739,7 @@ async function renderFeedback(sc, transcript, seconds, liveUsage, isRetry = fals
       <p>${esc(fb.praise)}</p>
     </section>
     ${fb.advice_ja ? `<section class="card">
-      <h2>${bi("advice")}</h2>
+      <h2>${bi("advice")}${reviewTag("advice")}</h2>
       ${L() !== "ja" && fb.advice ? `<p>${esc(fb.advice)}</p>` : ""}
       <p class="${L() !== "ja" ? "ja" : ""}">${esc(fb.advice_ja)}</p>
     </section>` : ""}
