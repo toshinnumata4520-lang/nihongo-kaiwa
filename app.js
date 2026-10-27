@@ -1,20 +1,20 @@
-import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610251248";
-import { SCENES } from "./scenes.js?v=202610251248";
-import { SITUATIONS } from "./situations.js?v=202610251248";
-import { SAFETY_RULES, mask } from "./safety.js?v=202610251248";
-import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610251248";
-import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610251248";
-import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610251248";
-import { MANNERS, MANNER_CATS } from "./manners.js?v=202610251248";
-import { EXAMS } from "./exams.js?v=202610251248";
-import { RUBY } from "./ruby.js?v=202610251248";
-import { speechOf, cleanSpeech } from "./yomi.js?v=202610251248";
-import { SPEAK } from "./speak.js?v=202610251248";
-import { VOICE } from "./voice.js?v=202610251248";
-import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610251248";
-import * as VM from "./vmaster.js?v=202610251248";
-import * as S from "./store.js?v=202610251248";
-import { autoSetup, preloadGis } from "./setup.js?v=202610251248";
+import { t, tja, tr, trEn, LANGS, getLang, setLang } from "./i18n.js?v=202610271535";
+import { SCENES } from "./scenes.js?v=202610271535";
+import { SITUATIONS } from "./situations.js?v=202610271535";
+import { SAFETY_RULES, mask } from "./safety.js?v=202610271535";
+import { startConversation, stopConversation, sendNote, liveSpeak, muteFor, LIVE_MODEL } from "./live.js?v=202610271535";
+import { makeFeedback, judgeRetry, judgeDrill, makeScaffold, judgeTodo, tts, TEXT_MODEL } from "./coach.js?v=202610271535";
+import { DRILLS, DRILL_INDUSTRIES } from "./drills.js?v=202610271535";
+import { MANNERS, MANNER_CATS } from "./manners.js?v=202610271535";
+import { EXAMS } from "./exams.js?v=202610271535";
+import { RUBY } from "./ruby.js?v=202610271535";
+import { speechOf, cleanSpeech } from "./yomi.js?v=202610271535";
+import { SPEAK } from "./speak.js?v=202610271535";
+import { VOICE } from "./voice.js?v=202610271535";
+import { VOCAB, VOCAB_MODES, vocabItem } from "./vocab.js?v=202610271535";
+import * as VM from "./vmaster.js?v=202610271535";
+import * as S from "./store.js?v=202610271535";
+import { autoSetup, preloadGis } from "./setup.js?v=202610271535";
 
 const CONSENT_VERSION = "trial-2026-10-v2";   // v2: 音声入力（ブラウザの音声認識）の送り先を説明に追加
 const MAX_SECONDS = 300;                       // 1場面は最長5分（原価を抑えるため）
@@ -237,6 +237,7 @@ const INDUSTRY = {
   "介護": { icon: "🧓", furi: "かいご", en: "Care work", vi: "Chăm sóc (Kaigo)" },
   "旅館・ホテル": { icon: "🏨", furi: "りょかん", en: "Hotel / Ryokan", vi: "Khách sạn / Ryokan" },
   "飲食": { icon: "🍽️", furi: "いんしょく", en: "Restaurant", vi: "Nhà hàng" },
+  "放送": { icon: "📢", furi: "ほうそう", en: "Announcements", vi: "Thông báo" },
 };
 function industryLabel(i) {
   const x = INDUSTRY[i] || { icon: "", furi: "" };
@@ -484,6 +485,10 @@ function renderPrep(sc) {
         <label class="toggle"><input type="checkbox" id="furi" ${S.getFurigana() ? "checked" : ""}> ${tx("furigana")}</label></div>
       <ul class="phrases">${sc.key_phrases.map(phraseHtml).join("")}</ul>
     </section>
+    ${VLEVELS.includes(sc.level) ? `<section class="card link">
+      <p>📘 ${bi("sceneVocab")}：<b>JLPT ${esc(sc.level)}</b></p>
+      <button id="toVocab" class="sub">${tx("vocabShort")} ${esc(sc.level)} →</button>
+    </section>` : ""}
     <section class="card">
       <h2>${bi("levelTitle")}</h2>
       <div class="levels">${LEVELS.map(x => `<button class="choice lv ${x.n === lv ? "on" : ""}" data-lv="${x.n}">${esc(t(x.k))}${x.n === rec ? `<small>★${tx("recommended")}</small>` : ""}</button>`).join("")}</div>
@@ -494,6 +499,8 @@ function renderPrep(sc) {
   $app.querySelectorAll("[data-lv]").forEach(b => b.onclick = () => { setLevel(sc, +b.dataset.lv); stay(() => renderPrep(sc)); });
   document.getElementById("furi").onchange = e => { S.setFurigana(e.target.checked); stay(() => renderPrep(sc)); };
   document.getElementById("start").onclick = () => renderTalk(sc);
+  // 会話の場面と、試験（JLPT）の単語練習をつなぐ：同じレベルの単語へ
+  document.getElementById("toVocab")?.addEventListener("click", () => renderVmLevel(sc.level));
 }
 
 // ───── 本番の会話 ─────
@@ -728,6 +735,11 @@ async function renderFeedback(sc, transcript, seconds, liveUsage, isRetry = fals
       <p class="big">${fb.goal_achieved ? "🎉 " + tx("goalDone") : "🙂 " + tx("goalAlmost")}</p>
       <p>${esc(fb.praise)}</p>
     </section>
+    ${fb.advice_ja ? `<section class="card">
+      <h2>${bi("advice")}</h2>
+      ${L() !== "ja" && fb.advice ? `<p>${esc(fb.advice)}</p>` : ""}
+      <p class="${L() !== "ja" ? "ja" : ""}">${esc(fb.advice_ja)}</p>
+    </section>` : ""}
     <section class="card">
       <h2>${bi("oneFix")}</h2>
       ${f.said ? `<p class="said">${tx("youSaid")}：${esc(f.said)}</p>
@@ -885,6 +897,7 @@ const STYLE_PROMPT = {
   "あいまい": "忙しそうな人が、軽い口調でさらっと言う",
   "電話": "電話の向こうのお客様が、ていねいに言う",
   "現場のことば": "建設現場の職長が、大きな声ではっきり言う",
+  "放送": "工場や施設の館内放送・防災放送のアナウンスとして、落ち着いた声で、はっきり、少しゆっくり言う",
 };
 async function playVoice(d, slow) {
   const sp = speechOf(d.say, d.say_kana, RUBY);
