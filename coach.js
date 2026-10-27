@@ -39,6 +39,8 @@ ${lines || "（会話なし）"}
 - ratings: 目標・ていねいさ・正確さ・なめらかさを1〜3で（3が良い）
 - praise: 具体的にほめる一言（やさしい日本語、30字以内）
 - fix: 学習者の発言から、いちばん大事な直しを1つだけ。said=学習者が言った文、better=自然で丁寧な言い方（短く）、better_furigana=betterの全文ひらがな、better_meaning=betterの意味を${LANG_NAME[lang] === "やさしい日本語" ? "English" : LANG_NAME[lang] || "English"}で、why_ja=理由（やさしい日本語、40字以内）、why=理由を${LANG_NAME[lang] || "English"}で
+- advice_ja: 今日の会話の総評（やさしい日本語、2文以内）。よかった点と、次に気をつけること1つ
+- advice: advice_ja と同じ内容を${LANG_NAME[lang] === "やさしい日本語" ? "やさしい日本語" : LANG_NAME[lang] || "English"}で（学習者の母国語で読めるように）
 - 直すところがない場合は fix.said を空にして、better に次に挑戦するとよい一文を入れる
 - model_lines: 学習者の発言を1つずつ順番に、この場面で自然で丁寧な正しい日本語に直したもの（said=学習者が言った文、correct=正しい日本語、furigana=correctの全文ひらがな）。直す必要がない文も correct に入れる。学習者が言うべきだったのに言わなかった大事な一言（達成条件に必要なもの）があれば、said を空にして最後に足す`;
   const schema = {
@@ -49,8 +51,9 @@ ${lines || "（会話なし）"}
       praise: { type: "STRING" },
       fix: { type: "OBJECT", properties: { said: { type: "STRING" }, better: { type: "STRING" }, better_furigana: { type: "STRING" }, better_meaning: { type: "STRING" }, why_ja: { type: "STRING" }, why: { type: "STRING" } }, required: ["said", "better", "better_furigana", "better_meaning", "why_ja", "why"] },
       model_lines: { type: "ARRAY", items: { type: "OBJECT", properties: { said: { type: "STRING" }, correct: { type: "STRING" }, furigana: { type: "STRING" } }, required: ["said", "correct", "furigana"] } },
+      advice_ja: { type: "STRING" }, advice: { type: "STRING" },
     },
-    required: ["goal_achieved", "ratings", "praise", "fix", "model_lines"],
+    required: ["goal_achieved", "ratings", "praise", "fix", "model_lines", "advice_ja", "advice"],
   };
   return generate(key, prompt, schema);
 }
